@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>傳說對決 遊戲內 10-Ban BP 模擬器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .aov-stage {
+      background:
+        radial-gradient(ellipse 60% 45% at 15% 25%, rgba(29, 114, 232, 0.22), transparent 70%),
+        radial-gradient(ellipse 60% 45% at 85% 25%, rgba(220, 38, 38, 0.20), transparent 70%),
+        radial-gradient(ellipse 50% 40% at 50% 0%, rgba(212, 168, 79, 0.14), transparent 65%),
+        linear-gradient(180deg, #070d1b 0%, #0b1428 50%, #060b16 100%);
+      color: #f1f5f9;
+      position: relative;
+    }
+    .aov-grid-bg {
+      background-image:
+        linear-gradient(rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+    .aov-panel {
+      background: rgba(12, 21, 40, 0.86);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(8px);
+    }
+    .aov-gold-frame {
+      border: 1px solid rgba(218, 173, 84, 0.55);
+      box-shadow: 0 0 16px rgba(218, 173, 84, 0.16), inset 0 1px 0 rgba(253, 230, 138, 0.25);
+    }
+    .aov-blue-slot {
+      background: linear-gradient(90deg, rgba(29, 99, 216, 0.22) 0%, rgba(15, 26, 48, 0.92) 45%);
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      border-left: 4px solid #38bdf8;
+    }
+    .aov-red-slot {
+      background: linear-gradient(270deg, rgba(220, 38, 38, 0.22) 0%, rgba(15, 26, 48, 0.92) 45%);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-right: 4px solid #fb7185;
+    }
+    .aov-active-slot {
+      border-color: #facc15 !important;
+      box-shadow: 0 0 14px rgba(250, 204, 21, 0.45), inset 0 0 10px rgba(250, 204, 21, 0.15);
+    }
+    .aov-gold-btn {
+      background: linear-gradient(180deg, #f5cf6b 0%, #d49b2b 55%, #b37816 100%);
+      color: #1a1103;
+      border: 1px solid #fde68a;
+      box-shadow: 0 0 18px rgba(245, 191, 66, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    }
+    .aov-gold-btn:hover:not(:disabled) {
+      filter: brightness(1.08);
+    }
+    .aov-gold-btn:disabled {
+      background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+      color: #64748b;
+      border-color: #475569;
+      box-shadow: none;
+    }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+    .custom-scroll::-webkit-scrollbar-thumb { background: rgba(212, 168, 79, 0.45); border-radius: 9999px; }
+  </style>
+</head>
+<body class="aov-stage aov-grid-bg antialiased m-0 p-2 md:p-3">
+  <div id="app" class="max-w-[1460px] mx-auto space-y-2.5">
+
+    <!-- IN-GAME TOP HEADER: BLUE 5 BANS | PHASE & TIMER HUD | RED 5 BANS -->
+    <header class="aov-panel aov-gold-frame rounded-xl p-2.5">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-center">
+        <!-- Blue 5-Ban Bar -->
+        <div class="lg:col-span-4 space-y-1">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-bold text-sky-400 flex items-center gap-1.5">
+              <span class="inline-block w-2 h-2 rounded-full bg-sky-400"></span>
+              藍方禁用 (BLUE BANS <span id="blueBanCount">0/5</span>)
+            </span>
+            <span id="blueHeaderWin" class="font-mono font-bold text-sky-300">50.0%</span>
+          </div>
+          <div id="blueBans" class="grid grid-cols-5 gap-1.5"></div>
+        </div>
+
+        <!-- Center Game Phase Banner & Tug-of-War -->
+        <div class="lg:col-span-4 flex flex-col items-center justify-center space-y-1.5 px-2">
+          <div class="flex items-center gap-2 text-xs font-bold tracking-wide text-amber-300">
+            <span>十週年裂隙穿梭 · 10-BAN 禁選大廳</span>
+            <select id="modeSelect" class="bg-[#0b1326] border border-amber-500/40 rounded px-2 py-0.5 text-xs text-amber-100 outline-none cursor-pointer">
+              <option value="pro32">賽事 5-Ban (3+2)</option>
+              <option value="pro23">進階 5-Ban (2+3)</option>
+              <option value="free">自由選禁 (排位賽)</option>
+            </select>
+          </div>
+
+          <div id="turnBanner" class="w-full text-center py-1 px-3 rounded-lg bg-[#080f1f] border border-amber-400/35 text-xs font-bold"></div>
+
+          <!-- Win-rate Tug of War -->
+          <div class="w-full space-y-1">
+            <div class="w-full h-2.5 rounded-full overflow-hidden bg-slate-900 border border-slate-600/60 flex">
+              <div id="blueBar" class="h-full transition-all duration-300" style="width:50%; background: linear-gradient(90deg, #0284c7, #38bdf8);"></div>
+              <div id="redBar" class="h-full transition-all duration-300" style="width:50%; background: linear-gradient(90deg, #f43f5e, #dc2626);"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Red 5-Ban Bar -->
+        <div class="lg:col-span-4 space-y-1">
+          <div class="flex items-center justify-between text-xs">
+            <span id="redHeaderWin" class="font-mono font-bold text-rose-300">50.0%</span>
+            <span class="font-bold text-rose-400 flex items-center gap-1.5">
+              紅方禁用 (RED BANS <span id="redBanCount">0/5</span>)
+              <span class="inline-block w-2 h-2 rounded-full bg-rose-400"></span>
+            </span>
+          </div>
+          <div id="redBans" class="grid grid-cols-5 gap-1.5"></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- IN-GAME 3-COLUMN ARENA: BLUE 5 PICKS | CENTER DRAFT POOL & ANALYTICS | RED 5 PICKS -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-start">
+
+      <!-- LEFT WING: BLUE TEAM 5 PLAYERS -->
+      <aside class="lg:col-span-3 aov-panel rounded-xl p-2.5 space-y-2.5">
+        <div class="flex items-center justify-between border-b border-sky-500/25 pb-1.5">
+          <div class="flex items-center gap-1.5">
+            <span class="px-1.5 py-0.5 rounded bg-sky-500/20 border border-sky-400/40 text-sky-300 text-xs font-bold">藍方</span>
+            <span class="text-xs font-bold text-slate-100">我方出戰陣容</span>
+          </div>
+          <span id="bluePickCount" class="text-xs font-mono text-sky-300">0/5</span>
+        </div>
+
+        <div id="bluePicks" class="space-y-1.5"></div>
+
+        <div id="blueAnalytics" class="pt-2 border-t border-slate-700/60 space-y-1.5 text-xs"></div>
+      </aside>
+
+      <!-- CENTER STAGE: WIN-RATE TREND + COACH RECOMMENDATIONS + HERO GRID -->
+      <main class="lg:col-span-6 space-y-2.5">
+
+        <!-- Win-Rate Trend & Power Curve HUD -->
+        <div class="aov-panel rounded-xl p-2.5 grid grid-cols-1 md:grid-cols-12 gap-2.5">
+          <div class="md:col-span-8 space-y-1">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-amber-300">即時勝率走向 (BP 第 1–20 手)</span>
+              <span id="trendDelta" class="font-mono text-slate-300">基準 50.0%</span>
+            </div>
+            <div id="trendChartWrap" class="w-full h-[120px] bg-[#070d1c] border border-slate-700/70 rounded-lg p-1"></div>
+          </div>
+          <div class="md:col-span-4 space-y-1">
+            <span class="text-xs font-bold text-amber-300 block">前 / 中 / 後期曲線</span>
+            <div id="phaseBars" class="bg-[#070d1c] border border-slate-700/70 rounded-lg p-2 space-y-2 h-[120px] flex flex-col justify-center"></div>
+          </div>
+        </div>
+
+        <!-- Coach / Tactical Recommendations -->
+        <div class="aov-panel aov-gold-frame rounded-xl p-2.5 space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 id="recTitle" class="text-xs font-bold text-amber-300">戰術教練：後續陣容搭配建議</h2>
+              <p id="recSubtitle" class="text-xs text-slate-300"></p>
+            </div>
+            <div id="recFilterWrap" class="flex flex-wrap items-center gap-1"></div>
+          </div>
+          <div id="compAlerts" class="flex flex-wrap gap-1.5"></div>
+          <div id="recList" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5"></div>
+        </div>
+
+        <!-- In-Game Hero Selection Grid -->
+        <div class="aov-panel rounded-xl p-2.5 space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-1" id="laneTabs"></div>
+            <div class="flex items-center gap-1.5">
+              <input id="searchInput" type="text" placeholder="搜尋英雄 / 原名 / 特色..." class="bg-[#070d1c] border border-slate-600/80 rounded-lg px-2.5 py-1 text-xs text-slate-100 placeholder:text-slate-400 outline-none focus:border-amber-400 w-40 sm:w-44" />
+              <select id="sortSelect" class="bg-[#070d1c] border border-slate-600/80 rounded-lg px-2 py-1 text-xs text-slate-100 outline-none">
+                <option value="rec">推薦序</option>
+                <option value="win">勝率高→低</option>
+                <option value="pro">模式強度高→低</option>
+                <option value="ban">Ban率高→低</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="heroGrid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5 max-h-[340px] overflow-y-auto custom-scroll pr-1"></div>
+        </div>
+
+      </main>
+
+      <!-- RIGHT WING: RED TEAM 5 PLAYERS -->
+      <aside class="lg:col-span-3 aov-panel rounded-xl p-2.5 space-y-2.5">
+        <div class="flex items-center justify-between border-b border-rose-500/25 pb-1.5">
+          <span id="redPickCount" class="text-xs font-mono text-rose-300">0/5</span>
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs font-bold text-slate-100">敵方出戰陣容</span>
+            <span class="px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-400/40 text-rose-300 text-xs font-bold">紅方</span>
+          </div>
+        </div>
+
+        <div id="redPicks" class="space-y-1.5"></div>
+
+        <div id="redAnalytics" class="pt-2 border-t border-slate-700/60 space-y-1.5 text-xs"></div>
+      </aside>
+    </div>
+
+    <!-- IN-GAME BOTTOM ACTION BAR (PREVIEW + GOLDEN LOCK-IN + QUICK TOOLS) -->
+    <footer class="aov-panel aov-gold-frame rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="aiStepBtn" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-900/60 text-sky-200 border border-sky-500/40 hover:bg-sky-800/70 transition cursor-pointer disabled:opacity-40">
+          AI 代選本手
+        </button>
+        <button id="undoBtn" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/80 text-slate-200 border border-slate-600/60 hover:bg-slate-700 transition cursor-pointer disabled:opacity-40">
+          上一步
+        </button>
+        <button id="swapBtn" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/80 text-slate-200 border border-slate-600/60 hover:bg-slate-700 transition cursor-pointer">
+          藍紅互換
+        </button>
+        <button id="resetBtn" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-950/70 text-rose-200 border border-rose-500/40 hover:bg-rose-900/70 transition cursor-pointer">
+          重置戰局
+        </button>
+        <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer ml-1 select-none">
+          <input id="instantLockChk" type="checkbox" class="accent-amber-400" />
+          單擊直接鎖定
+        </label>
+      </div>
+
+      <div class="flex items-center gap-3 flex-1 justify-end min-w-[280px]">
+        <div id="previewInfo" class="text-xs text-right text-slate-300 truncate max-w-[360px]">
+          請點選英雄預選，或直接點擊推薦卡一鍵鎖定（雙擊頭像亦可直接鎖定）
+        </div>
+        <button id="lockBtn" disabled class="aov-gold-btn px-5 py-2 rounded-lg text-xs font-extrabold tracking-wider transition cursor-pointer shrink-0">
+          確定鎖定
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. ARENA OF VALOR (傳說對決) COMPLETE HERO DATABASE (132 Verified Entries)
+    // =========================================================================
+    const HEROES = [
+      // --- 凱撒路 / 戰士 & 重裝 ---
+      { id:'florentino', name:'弗洛倫', en:'Florentino', lanes:['凱撒'], cls:'戰士', tier:'T0', win:52.6, pick:18.4, ban:32.5, pro:95, dmg:'True', curve:[8,9,8], tags:['單挑王','真傷','拉扯'], syn:['dolia','lumburr','krixi'], ctr:['maloch','omen','taara','arduin','biron'], note:'GCS 線霸常客，極限操作可一打多' },
+      { id:'yena', name:'葉娜', en:'Yena', lanes:['凱撒','打野'], cls:'戰士', tier:'T0', win:52.3, pick:15.2, ban:18.0, pro:94, dmg:'AD', curve:[7,9,8], tags:['切後排','免傷','霸體'], syn:['toro','iggy','liliana'], ctr:['violet','capheny','laville','yue'], note:'雙型態切換，職業賽進場切後首選' },
+      { id:'qi', name:'筱清', en:'Qi', lanes:['凱撒','打野','輔助'], cls:'戰士', tier:'T0', win:53.1, pick:14.8, ban:22.4, pro:93, dmg:'AD', curve:[7,9,8], tags:['強開','團控','續戰'], syn:['aya','dolia','lorion'], ctr:['nakroth','elandorr','hayate','wisp'], note:'閃現大招壁咚強開，反制高機動角' },
+      { id:'edras', name:'布萊恩', en:'Edras', lanes:['凱撒','打野'], cls:'戰士', tier:'T0', win:53.6, pick:16.8, ban:34.2, pro:91, dmg:'AD', curve:[6,9,10], tags:['光暗雙型態','超高回血','分推線霸'], syn:['dolia','aya','helen','lorion'], ctr:['taara','maloch','arduin','biron','omen'], note:'人類/光明/黑暗三型態切換，暗型態吸血與單挑分推極強' },
+      { id:'omen', name:'夜叉', en:'Omen', lanes:['凱撒'], cls:'戰士', tier:'T0', win:53.1, pick:15.2, ban:22.0, pro:93, dmg:'True', curve:[7,8,9], tags:['分推','單挑','強綁'], syn:['rouie','iggy','liliana'], ctr:['nakroth','aoi','murad','elsu'], note:'裂隙版本單挑與四一分推天花板，大招死綁核心' },
+      { id:'airi', name:'愛里', en:'Airi', lanes:['凱撒'], cls:'戰士', tier:'T1', win:52.1, pick:12.1, ban:10.5, pro:86, dmg:'True', curve:[5,8,10], tags:['後期大核','真傷','多段位移'], syn:['xeniel','dolia','annette'], ctr:['taara','maloch','toro','arduin'], note:'後期大魔王，真傷切坦極強' },
+      { id:'ryoma', name:'龍馬', en:'Ryoma', lanes:['凱撒','打野'], cls:'戰士', tier:'T1', win:51.4, pick:14.0, ban:8.2, pro:87, dmg:'AD', curve:[10,8,5], tags:['前期節奏','消耗','手長戰士'], syn:['iggy','krixi','teemee'], ctr:['florentino','kilgroth','wukong'], note:'前期線權霸主，配合中野入侵極強' },
+      { id:'bijan', name:'貝揚', en:'Bijan', lanes:['凱撒','輔助','打野'], cls:'戰士', tier:'T0', win:52.8, pick:13.8, ban:16.7, pro:92, dmg:'AD', curve:[8,9,8], tags:['強開','全球流','載人突襲'], syn:['iggy','annette','dolia','ybneth'], ctr:['elsu','yue','kahlii','celica'], note:'載隊友全圖開戰，完美克制無位移陣' },
+      { id:'biron', name:'狂鐵', en:'Biron', lanes:['凱撒'], cls:'戰士', tier:'T1', win:53.4, pick:14.5, ban:14.2, pro:85, dmg:'AD', curve:[9,9,7], tags:['對線壓制','護盾','反打'], syn:['aya','helen','lorion'], ctr:['yena','riktor','zuka','allain'], note:'充能回血極高，前期小團戰戰神' },
+      { id:'tachi', name:'霧己', en:'Tachi', lanes:['凱撒','打野'], cls:'戰士', tier:'T1', win:54.2, pick:11.0, ban:28.5, pro:91, dmg:'True', curve:[7,9,9], tags:['真傷','護盾','進場'], syn:['dolia','annette','lorion'], ctr:['toro','thane','baldum','mina'], note:'APL 高勝率戰坦，開印記後真傷無解' },
+      { id:'charlotte', name:'夏洛特', en:'Charlotte', lanes:['凱撒'], cls:'戰士', tier:'T1', win:51.8, pick:9.6, ban:6.4, pro:82, dmg:'AD', curve:[7,8,8], tags:['減攻速','免傷','拉扯'], syn:['dolia','teemee'], ctr:['capheny','yorn','telannas','kilgroth'], note:'減攻速機制專治站樁型射手' },
+      { id:'maloch', name:'馬洛斯', en:'Maloch', lanes:['凱撒','輔助','中路'], cls:'戰士', tier:'T0', win:53.5, pick:19.4, ban:26.0, pro:92, dmg:'True', curve:[7,9,9], tags:['裝備紅利','真傷強開','反手大招'], syn:['dolia','annette','lorion','capheny'], ctr:['toro','baldum','mina','xeniel'], note:'十週年裝備紅利受益者，打肉與單排線霸極強' },
+      { id:'riktor', name:'瑞克', en:'Riktor', lanes:['凱撒','輔助','打野'], cls:'戰士', tier:'T1', win:51.2, pick:12.4, ban:7.1, pro:86, dmg:'AD', curve:[9,8,6], tags:['草叢伏擊','霸體','跑線'], syn:['nakroth','iggy','liliana'], ctr:['elsu','yue','krixi','natalya'], note:'草叢雙擊飛支援極快，三位置搖擺' },
+      { id:'marja', name:'瑪迦', en:'Marja', lanes:['凱撒','中路','打野'], cls:'法師', tier:'T0', win:54.5, pick:13.2, ban:42.0, pro:90, dmg:'AP', curve:[7,9,9], tags:['線霸','法傷邊線','無法選中'], syn:['hayate','nakroth','aya'], ctr:['omen','florentino','allain','tachi'], note:'線霸級法坦，極難被單抓且傷害驚人' },
+      { id:'heino', name:'海諾', en:'Heino', lanes:['凱撒','中路','打野'], cls:'法師', tier:'T1', win:52.0, pick:11.8, ban:15.3, pro:87, dmg:'AP', curve:[7,8,9], tags:['遠近雙形態','時光回溯','拉扯'], syn:['dolia','toro','teemee'], ctr:['zuka','paine','quillen'], note:'與朵莉亞有專屬羈絆，高容錯抗壓' },
+      { id:'tuoming', name:'拓冥', en:'Tuoming', lanes:['凱撒','打野'], cls:'戰士', tier:'T1', win:52.7, pick:13.4, ban:24.8, pro:89, dmg:'AD', curve:[7,9,9], tags:['高機動','雙槍穿梭','切後排'], syn:['aya','dolia','ming'], ctr:['telannas','yorn','kahlii','yue'], note:'光暗本源高上限戰士，跑速與收割極強' },
+      { id:'yan', name:'青硯', en:'Yan', lanes:['凱撒','打野'], cls:'戰士', tier:'T1', win:51.5, pick:10.3, ban:5.2, pro:81, dmg:'AD', curve:[5,8,10], tags:['後期大核','多段位移','不可選中'], syn:['dolia','annette','teemee'], ctr:['violet','capheny','liliana'], note:'12等質變，後期團戰收割能力頂級' },
+      { id:'allain', name:'亞連', en:'Allain', lanes:['凱撒'], cls:'戰士', tier:'T2', win:50.8, pick:12.8, ban:4.5, pro:72, dmg:'True', curve:[6,8,9], tags:['單挑','混傷','鎖定切入'], syn:['aya','rouie','dolia'], ctr:['elsu','yorn','telannas'], note:'混傷與鎖定大招，易被強控與拉扯風箏' },
+      { id:'zuka', name:'祖卡', en:'Zuka', lanes:['凱撒','打野'], cls:'戰士', tier:'T1', win:51.7, pick:14.1, ban:9.8, pro:83, dmg:'AD', curve:[8,9,7], tags:['爆發','切後排','高機動'], syn:['lorion','annette','ybneth'], ctr:['violet','laville','telannas','krixi'], note:'四段位移配高爆發，專秒無位移脆皮' },
+      { id:'taara', name:'塔拉', en:'Taara', lanes:['凱撒','輔助'], cls:'坦克', tier:'T0', win:53.7, pick:16.4, ban:24.5, pro:87, dmg:'Tank', curve:[7,9,9], tags:['高坦回血','分推線霸','攪局'], syn:['helen','dolia','hayate'], ctr:['zuka','natalya','raz'], note:'十週年數值紅利，高端單排又坦又極難處理的線霸' },
+      { id:'skud', name:'司科德', en:'Skud', lanes:['凱撒','打野'], cls:'戰士', tier:'T2', win:50.6, pick:6.8, ban:2.1, pro:73, dmg:'AP', curve:[6,8,8], tags:['坦戰','反手推開','法傷'], syn:['hayate','violet'], ctr:['nakroth','keera','paine'], note:'厚實前排搭配混傷爆發' },
+      { id:'arthur', name:'莫托斯', en:'Arthur', lanes:['凱撒','輔助'], cls:'戰士', tier:'T2', win:51.1, pick:15.2, ban:1.8, pro:60, dmg:'AD', curve:[7,8,7], tags:['穩健前排','沉默','新手友善'], syn:['valhein','krixi','alice'], ctr:['nakroth','butterfly'], note:'操作簡單穩定，高段位略缺極限拉扯' },
+      { id:'arduin', name:'阿杜恩', en:'Arduin', lanes:['凱撒','輔助'], cls:'坦克', tier:'T1', win:52.2, pick:10.4, ban:5.4, pro:82, dmg:'Tank', curve:[7,9,8], tags:['11月優化','控制護盾','真傷續戰'], syn:['capheny','iggy'], ctr:['yena','zuka'], note:'11月中旬成長曲線與真傷係數優化，前排續戰大增' },
+      { id:'lubu', name:'呂布', en:'Lu Bu', lanes:['凱撒','打野'], cls:'戰士', tier:'T2', win:49.8, pick:8.1, ban:1.9, pro:66, dmg:'AD', curve:[8,8,6], tags:['吸血','單挑','前期'], syn:['aya','ming'], ctr:['ryoma','arthur'], note:'開大吸血硬剛，怕強控與拘魂' },
+      { id:'zanis', name:'趙雲', en:'Zanis', lanes:['打野','凱撒'], cls:'戰士', tier:'T0', win:53.9, pick:23.8, ban:32.0, pro:88, dmg:'True', curve:[7,9,10], tags:['版本黑馬','真傷解控','裝備紅利'], syn:['aya','helen','teemee'], ctr:['toro','thane','mina'], note:'十週年重塑＋反甲裝備紅利最大黑馬，容錯極高' },
+      { id:'astrid', name:'艾翠絲', en:'Astrid', lanes:['凱撒','打野'], cls:'戰士', tier:'T2', win:50.5, pick:6.1, ban:1.5, pro:68, dmg:'AD', curve:[6,8,8], tags:['無敵斬','護盾','破甲'], syn:['maloch','lorion'], ctr:['telannas','violet'], note:'大招無敵反殺與開團兼具' },
+      { id:'ww', name:'神力女超人', en:'Wonder Woman', lanes:['凱撒','輔助'], cls:'戰士', tier:'T2', win:50.3, pick:5.2, ban:1.4, pro:70, dmg:'True', curve:[8,8,6], tags:['護盾','強開','拉人'], syn:['iggy','krixi'], ctr:['elsu','yue'], note:'套盾抗傷與繩索強開表現穩定' },
+      { id:'superman', name:'超人', en:'Superman', lanes:['凱撒','輔助'], cls:'戰士', tier:'T1', win:50.4, pick:6.9, ban:9.2, pro:86, dmg:'AD', curve:[9,9,6], tags:['跑圖','攪局','推人'], syn:['iggy','liliana','rouie'], ctr:['telannas','yorn','natalya'], note:'高分段絕活支援角，怕硬控斷腿' },
+      { id:'kilgroth', name:'凱格路士', en:'Kil\'Groth', lanes:['凱撒'], cls:'戰士', tier:'T2', win:50.2, pick:5.4, ban:1.2, pro:62, dmg:'AD', curve:[4,7,10], tags:['免控','單帶','後期'], syn:['aya','dolia'], ctr:['aleister','arum','diaochan'], note:'大招免控切後，極需前期發育時間' },
+      { id:'errol', name:'埃羅', en:'Errol', lanes:['凱撒','打野'], cls:'戰士', tier:'T2', win:50.1, pick:6.3, ban:1.6, pro:65, dmg:'AD', curve:[8,8,6], tags:['吸血','不可選中','單挑'], syn:['aya','annette'], ctr:['zuka','lubu'], note:'前中期小團強勢，後期略顯笨重' },
+      { id:'veres', name:'緋淚', en:'Veres', lanes:['凱撒','輔助','打野'], cls:'戰士', tier:'T1', win:51.0, pick:8.7, ban:4.8, pro:80, dmg:'True', curve:[7,9,8], tags:['吸血','群控','反打'], syn:['maloch','lorion','dolia'], ctr:['toro','arduin','taara'], note:'真傷吸血一打多，團戰拉扯核心' },
+      { id:'rourke', name:'洛克', en:'Rourke', lanes:['打野','凱撒'], cls:'戰士', tier:'T2', win:50.7, pick:7.1, ban:2.2, pro:69, dmg:'AD', curve:[9,8,5], tags:['免控盾','貼臉爆發','推塔'], syn:['aya','teemee','ming'], ctr:['aleister','arum','nakroth'], note:'前期野區單挑王，後期手短是弱點' },
+      { id:'amily', name:'艾蜜莉', en:'Amily', lanes:['凱撒','打野'], cls:'戰士', tier:'T2', win:50.9, pick:6.0, ban:1.7, pro:67, dmg:'AD', curve:[7,8,7], tags:['單挑','減傷','踢飛'], syn:['aya','krixi'], ctr:['allain','omen','zuka'], note:'單挑極強，團戰需找角度切入' },
+      { id:'max', name:'麥克思', en:'Max', lanes:['凱撒','輔助'], cls:'坦克', tier:'T2', win:51.8, pick:5.8, ban:3.1, pro:76, dmg:'True', curve:[6,8,8], tags:['全圖鎖定','重傷','視野'], syn:['iggy','xeniel','bijan'], ctr:['elsu','helen','taara','kaine'], note:'全圖開大斷回血與抓殘血射手利器' },
+      { id:'xeniel', name:'贊尼爾', en:'Xeniel', lanes:['凱撒','輔助'], cls:'坦克', tier:'T1', win:52.2, pick:6.5, ban:4.4, pro:83, dmg:'Tank', curve:[6,8,9], tags:['全圖保排','分推','減傷'], syn:['airi','nakroth','billow','hayate'], ctr:['zuka','paine','keera'], note:'四一分推降臨保排神器，配合刺客絕佳' },
+      { id:'volkath', name:'安格列', en:'Volkath', lanes:['凱撒','打野'], cls:'戰士', tier:'T1', win:52.8, pick:12.4, ban:16.5, pro:89, dmg:'AD', curve:[7,9,8], tags:['黑暗之賜免死','強開衝陣','切後'], syn:['xeniel','dolia','lorion'], ctr:['violet','telannas','yue'], note:'配合十週年深淵魔龍黑暗之賜免死流極限發揮' },
+      { id:'boltbaron', name:'司空震', en:'Bolt Baron', lanes:['凱撒','打野'], cls:'戰士', tier:'T1', win:52.4, pick:9.1, ban:11.5, pro:84, dmg:'AP', curve:[6,9,9], tags:['法傷戰士','遠近切換','團戰AOE'], syn:['dolia','toro','aya'], ctr:['toro','maloch','arduin'], note:'補齊法術邊線傷害，開大團戰電場極痛' },
+      { id:'yuanliu_tank', name:'元流之子·坦克', en:'Yuanliu (Tank)', lanes:['凱撒','輔助'], cls:'坦克', tier:'T1', win:52.2, pick:10.4, ban:7.6, pro:84, dmg:'Tank', curve:[8,9,8], tags:['前排承傷','隊友加血','突進擊飛'], syn:['hayate','capheny','lorion','iggy'], ctr:['zuka','nakroth','paine'], note:'元流之子坦克型態，被動強化團隊血量與突進控制' },
+
+      // --- 打野 / 刺客 ---
+      { id:'billow', name:'比洛爾', en:'Billow', lanes:['打野','凱撒'], cls:'刺客', tier:'T0', win:53.8, pick:19.2, ban:48.5, pro:96, dmg:'AD', curve:[8,10,8], tags:['河道加速','強推控','收割機器'], syn:['aya','dolia','lorion','iggy'], ctr:['violet','capheny','laville','krixi'], note:'當前版本 T0 野王，連續斬擊與大招抓人極強' },
+      { id:'nakroth', name:'納克羅斯', en:'Nakroth', lanes:['打野'], cls:'刺客', tier:'T0', win:51.9, pick:22.5, ban:29.0, pro:95, dmg:'AD', curve:[9,9,8], tags:['極限機動','帶線牽制','反野'], syn:['xeniel','aya','liliana','rouie'], ctr:['elsu','yue','kahlii','celica'], note:'GCS 永恆常青樹，節奏與牽制上限最高' },
+      { id:'sinestrea', name:'蘇離', en:'Sinestrea', lanes:['打野'], cls:'刺客', tier:'T0', win:52.7, pick:14.6, ban:31.2, pro:94, dmg:'AD', curve:[8,9,9], tags:['換血反殺','隱身突襲','節奏'], syn:['dolia','toro','liliana'], ctr:['nakroth','murad','keera'], note:'職業賽首搶級打野，隱身先手與大招換血無解' },
+      { id:'keera', name:'綺蘿', en:'Keera', lanes:['打野','中路'], cls:'刺客', tier:'T0', win:52.9, pick:15.4, ban:27.6, pro:92, dmg:'AP', curve:[7,10,8], tags:['法傷打野','穿牆','秒後排'], syn:['aya','lorion','toro'], ctr:['violet','telannas','capheny','yorn'], note:'少數頂尖法傷打野，補齊團隊 AP 爆發' },
+      { id:'elandorr', name:'蘭鐸', en:'Eland\'orr', lanes:['打野','魔龍'], cls:'射手', tier:'T0', win:52.9, pick:16.8, ban:26.0, pro:93, dmg:'AD', curve:[9,9,9], tags:['被動暴擊','野射雙修','高機動'], syn:['teemee','toro','ming'], ctr:['florentino','maloch','taara'], note:'裂隙版本新增被動暴擊機制，後期收割爆發大幅強化' },
+      { id:'paine', name:'潘因', en:'Paine', lanes:['打野','中路'], cls:'刺客', tier:'T1', win:51.6, pick:14.2, ban:14.8, pro:86, dmg:'AP', curve:[9,9,7], tags:['全圖突襲','沉默','法傷爆發'], syn:['xeniel','aya','ilumia'], ctr:['elsu','laville','yue','krixi'], note:'超遠距離鎖定進場秒殺無位移 C 位' },
+      { id:'aoi', name:'星葵', en:'Aoi', lanes:['打野'], cls:'刺客', tier:'T1', win:51.4, pick:11.7, ban:18.4, pro:90, dmg:'AD', curve:[8,9,8], tags:['超遠切入','不可選中','收割'], syn:['xeniel','iggy','liliana'], ctr:['violet','elsu','kahlii'], note:'飛爪繞後切後排能力極強，容錯高' },
+      { id:'kriknak', name:'科里納卡', en:'Kriknak', lanes:['打野'], cls:'刺客', tier:'T1', win:52.5, pick:12.6, ban:9.4, pro:82, dmg:'AD', curve:[9,9,7], tags:['瞬間爆發','百分比傷','抓單'], syn:['aya','lorion','ybneth'], ctr:['hayate','wisp','capheny'], note:'百分比傷害打坦打脆皮都痛，節奏俐落' },
+      { id:'zill', name:'齊爾', en:'Zill', lanes:['打野','中路'], cls:'刺客', tier:'T1', win:51.7, pick:10.5, ban:8.1, pro:83, dmg:'AP', curve:[7,9,8], tags:['法傷打野','無敵收割','沉默'], syn:['aya','dolia','maloch'], ctr:['capheny','violet','telannas'], note:'大招不可選中穩吃後排，法傷打野首選' },
+      { id:'murad', name:'莫拉', en:'Murad', lanes:['打野'], cls:'刺客', tier:'T1', win:50.8, pick:13.0, ban:10.2, pro:80, dmg:'AD', curve:[6,9,8], tags:['無敵消耗','切後','極限拉扯'], syn:['liliana','rouie'], ctr:['elsu','yue','krixi'], note:'兩段無敵進場消耗，怕蹲影子與反野' },
+      { id:'quillen', name:'奎倫', en:'Quillen', lanes:['打野'], cls:'刺客', tier:'T2', win:51.1, pick:11.2, ban:7.8, pro:65, dmg:'AD', curve:[7,9,8], tags:['隱身暴擊','刷新收割','繞後'], syn:['aya','ming','teemee'], ctr:['yorn','telannas','kahlii'], note:'背後必暴與擊殺刷新，懼怕真視與反甲' },
+      { id:'enzo', name:'銀晝', en:'Enzo', lanes:['輔助','打野'], cls:'刺客', tier:'T1', win:51.8, pick:12.4, ban:9.5, pro:86, dmg:'AD', curve:[9,8,7], tags:['輔助搖擺','鉤人開團','減傷'], syn:['iggy','krixi','hayate','valhein'], ctr:['violet','laville','elsu'], note:'輔助／打野雙棲，一等甩鉤配合入侵節奏極強' },
+      { id:'butterfly', name:'刀鋒寶貝', en:'Butterfly', lanes:['打野'], cls:'刺客', tier:'T1', win:52.8, pick:18.2, ban:14.5, pro:78, dmg:'AD', curve:[8,9,8], tags:['11月重塑','二技必暴','刷新回血'], syn:['aya','helen','toro'], ctr:['violet','krixi','kahlii'], note:'11月機制升級，二技必暴附魔傷＋大招即時回血，排位T0炸魚神角' },
+      { id:'wukong', name:'孫悟空', en:'Wukong', lanes:['打野','凱撒'], cls:'刺客', tier:'T2', win:51.3, pick:15.8, ban:8.9, pro:62, dmg:'AD', curve:[4,8,10], tags:['隱身暴擊','後期秒殺','三棒'], syn:['aya','teemee','ming'], ctr:['telannas','violet','laville'], note:'排位高人氣暴擊刺客，前4分鐘野區偏弱' },
+      { id:'bright', name:'布萊特', en:'Bright', lanes:['打野','魔龍'], cls:'戰士', tier:'T1', win:51.9, pick:9.8, ban:7.4, pro:79, dmg:'True', curve:[5,8,10], tags:['不死3秒','真傷','遠近切換'], syn:['dolia','teemee','annette'], ctr:['toro','taara','maloch'], note:'大招延遲結算死亡，後期團戰核彈' },
+      { id:'zephys', name:'瑟斐斯', en:'Zephys', lanes:['打野','凱撒'], cls:'戰士', tier:'T1', win:51.6, pick:11.9, ban:3.8, pro:81, dmg:'AD', curve:[8,9,7], tags:['殘血減傷','穩定開團','半坦'], syn:['lorion','iggy','hayate'], ctr:['nakroth','wukong','quillen'], note:'全能半坦打野，容錯率高且不怕被秒' },
+      { id:'dextra', name:'夜姬', en:'Dextra', lanes:['凱撒','打野'], cls:'戰士', tier:'T2', win:50.2, pick:4.9, ban:1.5, pro:69, dmg:'AD', curve:[6,8,8], tags:['反傷大招','回血','連體嬰'], syn:['sinestrea'], ctr:['florentino','zuka'], note:'配合蘇離有專屬機制，單打抗壓偏坦克' },
+      { id:'kaine', name:'凱恩', en:'Kaine / 原蝙蝠俠', lanes:['打野','輔助','凱撒'], cls:'刺客', tier:'T1', win:52.2, pick:12.3, ban:19.6, pro:84, dmg:'AD', curve:[10,8,5], tags:['長期隱身','前期抓爆','原蝙蝠俠'], syn:['iggy','ilumia','max'], ctr:['elsu','wisp','telannas','yue'], note:'原蝙蝠俠重製，被動隱身給予全場極大視野心理壓力' },
+
+      // --- 中路 / 法師 ---
+      { id:'liliana', name:'莉莉安', en:'Liliana', lanes:['中路'], cls:'法師', tier:'T0', win:52.4, pick:24.1, ban:25.8, pro:97, dmg:'AP', curve:[7,9,10], tags:['萬金油','雙形態','消耗爆發'], syn:['dolia','nakroth','toro','hayate'], ctr:['telannas','yorn','kahlii'], note:'職業賽中路常青樹 T0，線權、消耗、收割全能' },
+      { id:'lorion', name:'洛里昂', en:'Lorion', lanes:['中路'], cls:'法師', tier:'T0', win:55.1, pick:19.8, ban:31.4, pro:98, dmg:'AP', curve:[8,10,9], tags:['團戰主宰','極限拉扯','法坦'], syn:['billow','toro','ybneth','hayate'], ctr:['capheny','violet','krixi'], note:'APL 55.7% 勝率冠軍法核，黑球減速與擊飛無解' },
+      { id:'iggy', name:'伊格', en:'Iggy', lanes:['中路'], cls:'法師', tier:'T0', win:52.8, pick:17.5, ban:21.3, pro:95, dmg:'AP', curve:[8,9,9], tags:['超遠消耗','全球支援','清兵快'], syn:['bijan','ybneth','nakroth','hayate'], ctr:['telannas','yue','kahlii'], note:'大招全圖支援與壓塔消耗，職業首選中路' },
+      { id:'zata', name:'颯迦', en:'Zata', lanes:['中路'], cls:'法師', tier:'T1', win:52.1, pick:15.3, ban:23.0, pro:89, dmg:'AP', curve:[8,10,7], tags:['飛天強殺','越塔','高爆發'], syn:['dolia','rouie','ybneth'], ctr:['violet','capheny','laville','elsu'], note:'配合朵莉亞雙飛天毀滅後排，怕強硬斷招' },
+      { id:'tulen', name:'圖倫', en:'Tulen', lanes:['中路','打野'], cls:'法師', tier:'T1', win:51.9, pick:18.6, ban:11.2, pro:87, dmg:'AP', curve:[9,9,7], tags:['前期強勢','貼臉爆發','鎖頭收割'], syn:['aya','teemee','toro'], ctr:['nakroth','ryoma','krixi'], note:'前期野區碰撞最強法師之一，滾雪球快' },
+      { id:'raz', name:'拉茲', en:'Raz', lanes:['中路','打野'], cls:'法師', tier:'T0', win:54.8, pick:16.7, ban:19.5, pro:94, dmg:'AP', curve:[7,9,9], tags:['法刺開團','連控','消耗秒殺'], syn:['toro','hayate','billow'], ctr:['violet','capheny','laville','liliana'], note:'APL 55%+ 高勝率法刺，一閃開團與消耗兼具' },
+      { id:'yue', name:'令月', en:'Yue', lanes:['中路'], cls:'法師', tier:'T1', win:52.3, pick:14.9, ban:17.4, pro:88, dmg:'AP', curve:[7,9,9], tags:['超遠POKE','推開防切','陣地戰'], syn:['toro','annette','elsu'], ctr:['maloch','toro','arduin'], note:'雙倍強化遠程消耗極痛，大招自保能力佳' },
+      { id:'krixi', name:'克里希', en:'Krixi', lanes:['中路'], cls:'法師', tier:'T1', win:52.5, pick:21.4, ban:8.6, pro:85, dmg:'AP', curve:[7,9,8], tags:['穩健控制','高爆發','百搭'], syn:['toro','florentino','capheny'], ctr:['nakroth','keera','zata'], note:'全分段萬金油法師，二技擊飛接大穩定度高' },
+      { id:'lauriel', name:'蘿兒', en:'Lauriel', lanes:['中路'], cls:'法師', tier:'T1', win:51.2, pick:13.2, ban:11.8, pro:82, dmg:'True', curve:[4,8,10], tags:['真傷法師','免傷跳舞','後期一打五'], syn:['dolia','helen','annette'], ctr:['toro','maloch','taara','arduin'], note:'專打多坦重裝陣容，極度懼怕硬控鎖定' },
+      { id:'bonnie', name:'邦妮', en:'Bonnie', lanes:['中路','輔助'], cls:'法師', tier:'T1', win:52.0, pick:9.5, ban:7.4, pro:84, dmg:'AP', curve:[8,9,8], tags:['遠距定身','聚怪','團控'], syn:['lorion','violet','bijan'], ctr:['nakroth','aoi','hayate'], note:'二技長距離定身抓靈活英雄效果顯著' },
+      { id:'goverra', name:'歌芙拉', en:'Goverra', lanes:['中路'], cls:'法師', tier:'T1', win:53.2, pick:12.8, ban:18.9, pro:86, dmg:'AP', curve:[8,9,8], tags:['推塔流','召喚物','陣地推進'], syn:['toro','capheny','zip'], ctr:['elsu','yorn','natalya'], note:'鐵腕薔薇召喚機器人快速拆塔，節奏壓迫力強' },
+      { id:'evita', name:'艾薇塔', en:'Evita', lanes:['中路'], cls:'法師', tier:'T0', win:54.6, pick:18.8, ban:56.0, pro:96, dmg:'AP', curve:[8,10,10], tags:['十週年幻神','聚怪爆發','超厚護盾'], syn:['dolia','toro','billow'], ctr:['capheny','violet','telannas'], note:'十週年規格外法王，二技聚怪接分裂彈與大招厚盾主宰戰局' },
+      { id:'yuanliu_mage', name:'元流之子·法師', en:'Yuanliu (Mage)', lanes:['中路'], cls:'法師', tier:'T1', win:52.4, pick:12.6, ban:10.8, pro:86, dmg:'AP', curve:[7,9,9], tags:['萬妙之心','流態連招','範圍眩暈'], syn:['toro','ybneth','dolia','hayate'], ctr:['toro','baldum','kahlii'], note:'元流之子法師型態，泉水淬煉自選屬性與大招光束割裂陣型' },
+      { id:'dirak', name:'狄拉克', en:'Dirak', lanes:['中路'], cls:'法師', tier:'T0', win:53.8, pick:14.2, ban:28.5, pro:94, dmg:'AP', curve:[7,9,10], tags:['重製崛起','全場收割','格擋飛行物'], syn:['annette','elsu','capheny'], ctr:['elsu','yue','krixi','telannas'], note:'十週年重製後晉升 T0 法王，一技與大招隨時開啟收割能力頂尖' },
+      { id:'flash', name:'閃電俠', en:'The Flash', lanes:['中路','打野'], cls:'法師', tier:'T2', win:50.4, pick:7.2, ban:2.9, pro:75, dmg:'AP', curve:[7,8,8], tags:['突進開團','不可選中','牽制'], syn:['maloch','dolia'], ctr:['elsu','yue','kahlii'], note:'一技超遠突進接大招，易被反手控死' },
+      { id:'kahlii', name:'卡莉', en:'Kahlii', lanes:['中路'], cls:'法師', tier:'T2', win:51.8, pick:10.4, ban:2.1, pro:72, dmg:'AP', curve:[6,8,9], tags:['超遠掃射','守塔','洗兵'], syn:['toro','annette','baldum'], ctr:['natalya','krixi','azzenka'], note:'大招洗兵壓塔極快，缺位移怕刺客切入' },
+      { id:'natalya', name:'娜塔亞', en:'Natalya', lanes:['中路'], cls:'法師', tier:'T1', win:52.7, pick:16.9, ban:9.5, pro:70, dmg:'AP', curve:[9,9,7], tags:['前期清兵','超高爆發','射線洗臉'], syn:['grakk','baldum','toro'], ctr:['toro','maloch','arduin'], note:'排位高勝率砲台，二技接大秒坦秒後排' },
+      { id:'diaochan', name:'貂蟬', en:'Diaochan', lanes:['中路','輔助'], cls:'法師', tier:'T2', win:51.5, pick:11.6, ban:5.4, pro:68, dmg:'AP', curve:[6,8,9], tags:['冰凍團控','反手護盾','蹲草'], syn:['baldum','grakk','gildur'], ctr:['allain','lubu','arthur'], note:'被動免傷盾與長時間冰凍，怕霸體與解控' },
+      { id:'aleister', name:'阿萊斯特', en:'Aleister', lanes:['中路','輔助'], cls:'法師', tier:'T1', win:51.3, pick:14.5, ban:22.7, pro:79, dmg:'AP', curve:[7,8,7], tags:['絕對壓制','拆火保排','真傷'], syn:['hayate','violet','capheny'], ctr:['nakroth','billow','florentino','aoi','zata'], note:'「你強任你強，東皇加張良」專治所有秀操作角' },
+      { id:'veera', name:'薇菈', en:'Veera', lanes:['中路'], cls:'法師', tier:'T2', win:50.9, pick:12.4, ban:6.8, pro:63, dmg:'AP', curve:[7,9,7], tags:['必中暈眩','蹲草秒殺','單點'], syn:['kaine','wukong'], ctr:['nakroth','keera','elandorr'], note:'二技必中指定暈眩專抓靈活刺客，缺AOE清線' },
+      { id:'ignis', name:'伊耿士', en:'Ignis', lanes:['中路'], cls:'法師', tier:'T2', win:50.6, pick:5.1, ban:1.3, pro:74, dmg:'AP', curve:[7,8,9], tags:['無限護盾','真傷','連環暈'], syn:['toro','dolia'], ctr:['taara','maloch'], note:'技能連段無縫暈眩與真傷，操作吃節奏' },
+      { id:'darcy', name:'達爾西', en:'D\'Arcy', lanes:['打野','中路'], cls:'法師', tier:'T1', win:52.6, pick:9.4, ban:9.8, pro:84, dmg:'AP', curve:[7,9,9], tags:['被動重做','霸體回血','高爆發'], syn:['gildur','maloch'], ctr:['laville','yorn','kahlii'], note:'被動重塑擺脫大招依賴，一技霸體回血＋版本節奏極佳' },
+      { id:'mganga', name:'穆加爵', en:'Mganga', lanes:['中路'], cls:'法師', tier:'T2', win:51.4, pick:7.5, ban:1.8, pro:62, dmg:'AP', curve:[9,8,6], tags:['毒傷疊層','群體補血','陣地戰'], syn:['toro','taara','biron'], ctr:['yena','florentino'], note:'一級線霸與持續回血，中後期怕手長消耗' },
+      { id:'jinnar', name:'金納', en:'Jinnar', lanes:['中路'], cls:'法師', tier:'T2', win:50.5, pick:4.5, ban:1.1, pro:67, dmg:'AP', curve:[7,9,7], tags:['進場法坦','減傷','團戰AOE'], syn:['aya','ybneth'], ctr:['violet','laville'], note:'閃現進場減傷炸裂，進場後較缺退場手段' },
+      { id:'ilumia', name:'盧蜜亞', en:'Ilumia', lanes:['中路','輔助'], cls:'法師', tier:'T1', win:52.1, pick:8.2, ban:3.9, pro:81, dmg:'AP', curve:[6,8,9], tags:['全圖開視野','全圖打斷','陣地控制'], syn:['paine','kaine','bijan','elsu'], ctr:['keera','kaine','wukong'], note:'全圖大招開視野與反制隱身/開龍神器' },
+      { id:'azzenka', name:'阿茲卡', en:'Azzen\'Ka', lanes:['中路'], cls:'法師', tier:'T3', win:50.1, pick:4.2, ban:0.9, pro:55, dmg:'AP', curve:[5,8,9], tags:['石化控制','守高地','反手'], syn:['toro','baldum'], ctr:['allain','lubu'], note:'反手石化控場極強，但自身毫無位移' },
+      { id:'preyta', name:'普雷塔', en:'Preyta', lanes:['中路'], cls:'法師', tier:'T1', win:53.4, pick:11.6, ban:18.5, pro:88, dmg:'AP', curve:[6,9,10], tags:['十週年重塑','無限疊魔攻','無兵線點塔'], syn:['aya','toro','teemee'], ctr:['kahlii','natalya','toro'], note:'十週年共創大重製：無限魔攻疊層＋1800碼無兵點塔＋移動施法' },
+      { id:'ishar', name:'依夏', en:'Ishar', lanes:['中路','輔助'], cls:'法師', tier:'T2', win:51.0, pick:5.6, ban:1.5, pro:64, dmg:'AP', curve:[8,8,6], tags:['召喚夢夢','結界框人','抗傷'], syn:['goverra','capheny'], ctr:['nakroth','elandorr'], note:'夢夢協助扛塔與干擾，中後期輸出偏低' },
+
+      // --- 魔龍路 / 射手 ---
+      { id:'hayate', name:'亥犽', en:'Hayate', lanes:['魔龍','打野'], cls:'射手', tier:'T0', win:51.8, pick:23.4, ban:38.5, pro:98, dmg:'True', curve:[6,9,10], tags:['真實傷害','高機動','單帶切坦'], syn:['teemee','toro','annette','ybneth'], ctr:['toro','thane','taara','maloch','arduin'], note:'傳說萬年 T0 射手，真實傷害與風箏能力無可取代' },
+      { id:'violet', name:'堇', en:'Violet', lanes:['魔龍'], cls:'射手', tier:'T0', win:52.1, pick:24.8, ban:22.4, pro:96, dmg:'AD', curve:[7,9,9], tags:['遠程翻滾','高爆發','點塔快'], syn:['toro','ybneth','teemee','dolia'], ctr:['elsu','valhein','wisp'], note:'GCS 首選爆發射手，翻滾安全消耗與快速推塔' },
+      { id:'elsu', name:'蘇', en:'Elsu', lanes:['魔龍','中路'], cls:'射手', tier:'T0', win:51.4, pick:18.9, ban:29.5, pro:95, dmg:'AD', curve:[10,9,7], tags:['視野眼位','超遠狙擊','前期壓制'], syn:['yue','iggy','ilumia','annette'], ctr:['valhein','capheny','laville','telannas'], note:'職業賽線霸射手，一技視野與二技狙擊主宰前期' },
+      { id:'capheny', name:'卡芬妮', en:'Capheny', lanes:['魔龍'], cls:'射手', tier:'T0', win:52.4, pick:19.6, ban:24.0, pro:94, dmg:'AD', curve:[6,9,10], tags:['移動射擊','雙形態','團戰收割'], syn:['teemee','aya','helen','annette'], ctr:['toro','thane','zip'], note:'APL 高勝率常客，搭配提米/海倫平推極恐怖' },
+      { id:'yuanliu_adc', name:'元流之子·射手', en:'Yuanliu (Marksman)', lanes:['魔龍'], cls:'射手', tier:'T0', win:53.1, pick:15.8, ban:21.4, pro:90, dmg:'AD', curve:[7,9,10], tags:['沉舟之志','萬箭齊發','多段位移'], syn:['teemee','toro','annette','ming'], ctr:['capheny','yorn','telannas','maloch'], note:'元流之子射手型態，擊退滯空拉扯與大招箭雨清場極強' },
+      { id:'wisp', name:'靈靈', en:'Wisp', lanes:['魔龍'], cls:'射手', tier:'T1', win:52.2, pick:15.4, ban:12.6, pro:90, dmg:'AD', curve:[6,9,9], tags:['AOE彈幕','推塔','位移自保'], syn:['toro','ybneth','lorion'], ctr:['capheny','valhein','teeri'], note:'APL 75場 52% 勝率主力射手，大招壓塔清場極強' },
+      { id:'valhein', name:'凡恩', en:'Valhein', lanes:['魔龍','打野','中路'], cls:'射手', tier:'T0', win:52.9, pick:28.5, ban:52.0, pro:95, dmg:'AD', curve:[10,8,6], tags:['前期壓制','必中暈','節奏推塔'], syn:['ming','teemee','toro','zip'], ctr:['violet','capheny','hayate','yorn'], note:'APL 禁用率高達 60~88%，極致對線壓迫與滾雪球' },
+      { id:'yorn', name:'勇', en:'Yorn', lanes:['魔龍'], cls:'射手', tier:'T1', win:52.8, pick:19.6, ban:11.5, pro:80, dmg:'True', curve:[5,8,10], tags:['照視野強化','真傷掃射','後期砲台'], syn:['annette','toro','zip','lumburr'], ctr:['toro','thane','taara','maloch'], note:'裂隙版本一二技新增照視野與輸出曲線優化，容錯率大增' },
+      { id:'telannas', name:'特爾安娜絲', en:'Tel\'Annas', lanes:['魔龍'], cls:'射手', tier:'T2', win:52.0, pick:18.0, ban:6.5, pro:73, dmg:'AD', curve:[5,8,10], tags:['超遠射程','混傷','陣地推進'], syn:['toro','annette','thane','lumburr'], ctr:['valhein','capheny'], note:'射程最遠穩健推塔，怕強開與法刺進場' },
+      { id:'laville', name:'拉維爾', en:'Laville', lanes:['魔龍'], cls:'射手', tier:'T0', win:53.4, pick:22.4, ban:24.0, pro:93, dmg:'AD', curve:[6,9,10], tags:['電刀流主力','免控盾','全圖開戰'], syn:['toro','rouie','aya','teemee'], ctr:['aleister','veera','diaochan'], note:'十週年版本勝率出場雙高主力射手，電刀彈射與全圖大招極強' },
+      { id:'thorne', name:'索文', en:'Thorne', lanes:['魔龍','打野'], cls:'射手', tier:'T1', win:51.3, pick:11.2, ban:5.6, pro:83, dmg:'True', curve:[5,8,10], tags:['切換子彈','真傷','後期大核'], syn:['teemee','annette','toro'], ctr:['toro','baldum','taara'], note:'紫彈真傷配黃彈暈眩，中後期爆發極為全面' },
+      { id:'stuart', name:'森圖爾特', en:'Stuart / 原小丑', lanes:['魔龍'], cls:'射手', tier:'T1', win:52.8, pick:14.7, ban:18.2, pro:87, dmg:'AD', curve:[8,9,8], tags:['物理免疫','遠程消耗','原小丑'], syn:['toro','iggy','lorion'], ctr:['nakroth','wukong','quillen','violet'], note:'原小丑重製，二技物理免疫反制物理刺客' },
+      { id:'erin', name:'艾琳', en:'Erin', lanes:['魔龍','中路'], cls:'射手', tier:'T1', win:52.5, pick:13.1, ban:14.5, pro:86, dmg:'AP', curve:[6,9,9], tags:['法術射手','移動施法','高機動'], syn:['dolia','ming','toro'], ctr:['wukong','florentino','stuart'], note:'全法傷射手解決菜刀隊問題，配合朵莉亞極強' },
+      { id:'teeri', name:'緹莉', en:'Teeri', lanes:['魔龍'], cls:'射手', tier:'T1', win:51.7, pick:9.8, ban:4.1, pro:80, dmg:'AD', curve:[6,9,9], tags:['穿透彈射','團戰AOE','全圖收割'], syn:['baldum','lorion','ybneth'], ctr:['yorn','telannas','helen'], note:'團戰目標越密集彈射傷害越爆炸' },
+      { id:'celica', name:'希露卡', en:'Celica', lanes:['魔龍'], cls:'射手', tier:'T1', win:53.0, pick:10.6, ban:8.4, pro:83, dmg:'AD', curve:[6,9,10], tags:['暴走翻倍','高地攻城','加速3秒'], syn:['dirak','annette','toro'], ctr:['telannas','wisp','kahlii'], note:'裂隙版本一技物攻翻倍加速3秒＋大招冷卻大減，攻城強度飆升' },
+      { id:'fennik', name:'菲尼克', en:'Fennik', lanes:['打野','魔龍'], cls:'射手', tier:'T1', win:51.9, pick:10.6, ban:6.9, pro:84, dmg:'AD', curve:[9,9,6], tags:['吃龍拆塔','不可選中','打野射手'], syn:['teemee','toro','iggy'], ctr:['nakroth','elsu'], note:'刷野與控魔龍凱撒速度全場最快' },
+      { id:'lindis', name:'琳蒂', en:'Lindis', lanes:['打野','魔龍'], cls:'射手', tier:'T1', win:52.5, pick:9.8, ban:7.5, pro:82, dmg:'AD', curve:[8,9,9], tags:['百暴瞬秒','草叢加速','照視野'], syn:['ybneth','annette'], ctr:['kaine','wukong','quillen'], note:'裂隙版本百暴暗影流打野崛起，高機動瞬秒後排' },
+      { id:'moren', name:'摩恩', en:'Moren', lanes:['魔龍','打野'], cls:'射手', tier:'T1', win:52.6, pick:9.2, ban:5.4, pro:79, dmg:'AD', curve:[5,8,10], tags:['高雙防','貼臉吸血','重製強勢'], syn:['helen','aya','teemee'], ctr:['zuka','nakroth','quillen'], note:'疊滿被動雙防超高，較不怕刺客單秒' },
+      { id:'slimz', name:'史蘭茲', en:'Slimz', lanes:['打野','魔龍'], cls:'射手', tier:'T1', win:52.3, pick:10.9, ban:7.2, pro:85, dmg:'True', curve:[5,8,10], tags:['長矛定身','百分比傷','跳躍拉扯'], syn:['teemee','toro','lorion'], ctr:['toro','thane','taara'], note:'GCS 雙核體系熱門，長矛命中先手開戰' },
+
+      // --- 輔助 / 坦輔 & 功能輔 ---
+      { id:'dolia', name:'朵莉亞', en:'Dolia', lanes:['輔助','中路'], cls:'輔助', tier:'T0', win:53.5, pick:18.4, ban:54.0, pro:97, dmg:'AP', curve:[7,9,10], tags:['刷新大招','回復','水領域'], syn:['heino','liliana','erin','zata','maloch','billow','edras'], ctr:['nakroth','murad'], note:'全場戰術核心，大招刷新友軍冷卻創造雙大奇蹟' },
+      { id:'shaosiyuan', name:'少司緣', en:'Shaosiyuan / 少思緣', lanes:['輔助','中路'], cls:'輔助', tier:'T0', win:53.9, pick:17.5, ban:41.5, pro:93, dmg:'AP', curve:[10,9,8], tags:['紅線偷錢','定身開團','大招群補'], syn:['valhein','hayate','billow','nakroth','elsu'], ctr:['elandorr','nakroth','yorn','telannas'], note:'一等超強節奏軟輔，牽線偷金幣、兩段定身與大招群體回血' },
+      { id:'toro', name:'牛魔王', en:'Toro', lanes:['輔助'], cls:'坦克', tier:'T0', win:54.3, pick:21.2, ban:26.5, pro:96, dmg:'Tank', curve:[8,9,9], tags:['高免傷','霸體強開','穩健坦輔'], syn:['hayate','capheny','lorion','violet'], ctr:['hayate','nakroth','krixi','aleister'], note:'APL 54.4% 高勝率坦輔，吃傷能力與團控頂級' },
+      { id:'ybneth', name:'古木', en:'Y\'bneth', lanes:['輔助','凱撒'], cls:'坦克', tier:'T0', win:52.9, pick:16.8, ban:24.2, pro:95, dmg:'Tank', curve:[8,10,8], tags:['雙推強開','回血','團戰分割'], syn:['violet','wisp','iggy','lorion'], ctr:['hayate','capheny','elsu'], note:'GCS 頂尖開團硬輔，大招控制與自補極強' },
+      { id:'teemee', name:'提米', en:'TeeMee', lanes:['輔助'], cls:'輔助', tier:'T0', win:54.1, pick:18.2, ban:34.0, pro:96, dmg:'Tank', curve:[8,9,10], tags:['史萊姆衝浪','被動加錢','復活大招'], syn:['capheny','hayate','valhein','thorne','yuanliu_adc'], ctr:['zuka','billow','keera'], note:'十週年最強生命援護駕駛員，復活保核與滾經濟無解' },
+      { id:'yuanliu_sup', name:'元流之子·輔助', en:'Yuanliu (Support)', lanes:['輔助'], cls:'輔助', tier:'T1', win:52.6, pick:11.8, ban:9.2, pro:85, dmg:'AP', curve:[8,9,8], tags:['守望之諾','護盾治療','保排視野'], syn:['capheny','violet','elsu','hayate'], ctr:['billow','keera','zata'], note:'元流之子輔助型態，提供關鍵護盾、治療與視野控場' },
+      { id:'thane', name:'薩尼', en:'Thane', lanes:['輔助','凱撒'], cls:'坦克', tier:'T0', win:53.8, pick:21.4, ban:25.0, pro:93, dmg:'Tank', curve:[8,9,9], tags:['凱撒搖擺','強推開戰','保排天花板'], syn:['telannas','yorn','krixi','violet'], ctr:['nakroth','billow','zuka','florentino'], note:'十週年版本輔助天花板，配合凱撒搖擺與強推拆火表現極強' },
+      { id:'baldum', name:'伯頓', en:'Baldum', lanes:['輔助','凱撒'], cls:'坦克', tier:'T0', win:53.2, pick:16.5, ban:18.4, pro:91, dmg:'Tank', curve:[8,9,9], tags:['背人開戰','地牢封印','硬輔天花板'], syn:['natalya','teeri','diaochan','violet'], ctr:['allain','wukong','quillen','capheny'], note:'十週年野怪團戰環境 T0 硬輔，封印割裂戰場與高物防極強' },
+      { id:'grakk', name:'夸克', en:'Grakk', lanes:['輔助','中路'], cls:'坦克', tier:'T1', win:52.6, pick:20.4, ban:31.0, pro:84, dmg:'Tank', curve:[8,9,8], tags:['神鉤開團','吸星大法','視野威懾'], syn:['natalya','valhein','diaochan','krixi'], ctr:['yorn','telannas','kahlii','elsu'], note:'一鉤定江山，逼迫無位移後排交淨化或死亡' },
+      { id:'annette', name:'安奈特', en:'Annette', lanes:['輔助','中路'], cls:'輔助', tier:'T0', win:52.7, pick:16.1, ban:35.6, pro:94, dmg:'AP', curve:[7,9,9], tags:['風牆反開','護盾保排','消耗'], syn:['hayate','capheny','elsu','yorn'], ctr:['billow','nakroth','zuka','yena','maloch'], note:'APL 高禁率保排輔助，大招風牆完克衝陣與刺客' },
+      { id:'gildur', name:'哥德爾', en:'Gildur', lanes:['輔助','中路'], cls:'法師', tier:'T1', win:53.3, pick:15.8, ban:19.4, pro:87, dmg:'AP', curve:[6,9,10], tags:['遠程暈眩','群體石化','法傷輔'], syn:['elsu','valhein','natalya'], ctr:['violet','laville','telannas'], note:'手長消耗極痛，若敵方缺解控則大招控到死' },
+      { id:'omega', name:'歐米茄', en:'Omega', lanes:['輔助','凱撒'], cls:'坦克', tier:'T0', win:54.2, pick:18.5, ban:35.0, pro:91, dmg:'Tank', curve:[9,9,8], tags:['刷盾毒瘤','快速拆塔','連環控制'], syn:['goverra','valhein','violet'], ctr:['yorn','elsu','natalya'], note:'裂隙版本刷盾流與版本裝備完美契合，凱撒/輔助雙棲毒瘤' },
+      { id:'mina', name:'美娜', en:'Mina', lanes:['輔助','凱撒'], cls:'坦克', tier:'T1', win:52.5, pick:12.6, ban:8.5, pro:83, dmg:'Tank', curve:[8,9,8], tags:['群體嘲諷','勾人反打','真傷反擊'], syn:['hayate','lorion','krixi'], ctr:['capheny','yorn','florentino','allain'], note:'專治高攻速射手與近戰戰士，嘲諷反開極強' },
+      { id:'roxie', name:'諾可西', en:'Roxie', lanes:['輔助','凱撒'], cls:'坦克', tier:'T1', win:52.2, pick:9.8, ban:7.1, pro:84, dmg:'AP', curve:[7,9,8], tags:['火線拉人','燒傷續戰','單抓'], syn:['dolia','krixi','valhein'], ctr:['nakroth','billow','yena'], note:'大招強綁核心拉回己方陣型，容錯率高' },
+      { id:'arum', name:'艾瑞', en:'Arum', lanes:['輔助'], cls:'坦克', tier:'T1', win:51.9, pick:13.5, ban:26.4, pro:85, dmg:'Tank', curve:[9,8,7], tags:['強制換血鎖定','一級反野','克制刺客'], syn:['hayate','violet','krixi'], ctr:['nakroth','billow','murad','aoi','florentino'], note:'大招強行壓制無法淨化，刺客與秀角天敵' },
+      { id:'krizzix', name:'卡瑞茲', en:'Krizzix', lanes:['輔助'], cls:'輔助', tier:'T1', win:51.5, pick:8.6, ban:6.2, pro:87, dmg:'Tank', curve:[8,9,7], tags:['群體隱身','開團拉人','減雙防'], syn:['zuka','yena','lorion','capheny'], ctr:['elsu','kaine'], note:'帶隊友集體隱身強開，高階配合威力巨大' },
+      { id:'aya', name:'芽芽', en:'Aya', lanes:['輔助','中路'], cls:'輔助', tier:'T1', win:52.1, pick:16.9, ban:39.2, pro:84, dmg:'AP', curve:[6,9,10], tags:['附身護盾','無法選中','強化野核'], syn:['billow','nakroth','tuoming','wukong','qi','edras'], ctr:['zuka','paine'], note:'附身野核或戰士給予超厚護盾與加速，極吃宿主' },
+      { id:'ming', name:'明世隱', en:'Ming', lanes:['輔助'], cls:'輔助', tier:'T1', win:52.4, pick:10.2, ban:11.6, pro:80, dmg:'AP', curve:[9,9,7], tags:['牽線增傷','奶一口','前期壓制'], syn:['valhein','capheny','erin','tuoming'], ctr:['toro','taara'], note:'牽線直接大幅拉高核心輸出與攻速，推線神速' },
+      { id:'helen', name:'海倫', en:'Helen / 原佩娜', lanes:['輔助'], cls:'輔助', tier:'T1', win:52.8, pick:12.4, ban:15.0, pro:82, dmg:'AP', curve:[7,9,9], tags:['群體補血','減傷','原佩娜'], syn:['capheny','moren','taara','lauriel','edras'], ctr:['yue','iggy','elsu'], note:'原佩娜重製，極致團隊續航補血克制消耗流' },
+      { id:'alice', name:'愛麗絲', en:'Alice', lanes:['輔助','中路'], cls:'輔助', tier:'T1', win:52.3, pick:16.2, ban:7.8, pro:81, dmg:'AP', curve:[6,9,9], tags:['中路搖擺','大招沉默','加速盾'], syn:['capheny','yorn','lorion','thane','enzo'], ctr:['lauriel','florentino','zata'], note:'中路／輔助雙棲，全魔攻中路愛麗絲團戰沉默與拉扯節奏極強' },
+      { id:'rouie', name:'若伊', en:'Rouie', lanes:['輔助'], cls:'輔助', tier:'T1', win:50.5, pick:6.1, ban:12.4, pro:91, dmg:'AP', curve:[7,9,9], tags:['電梯回家','全圖召喚','戰術體系'], syn:['omen','nakroth','zata','superman','laville'], ctr:['maloch','goverra'], note:'GCS 五排頂級戰術角，四一分推與回補節奏無解' },
+      { id:'lumburr', name:'朗博', en:'Lumburr', lanes:['輔助'], cls:'坦克', tier:'T1', win:51.8, pick:9.4, ban:3.8, pro:83, dmg:'Tank', curve:[7,8,8], tags:['雙防光環','護盾','大招擊飛'], syn:['yorn','telannas','florentino','violet'], ctr:['nakroth','zuka','paine'], note:'給後排加雙防與護盾，大招可反開也可先手' },
+      { id:'cresht', name:'克萊斯', en:'Cresht', lanes:['輔助'], cls:'坦克', tier:'T2', win:51.2, pick:7.6, ban:2.4, pro:76, dmg:'Tank', curve:[6,9,8], tags:['變身巨盾','越塔強開','推開'], syn:['violet','capheny','krixi'], ctr:['zuka','yena'], note:'有大時團戰抗傷極高，無怒氣時相對被動' },
+      { id:'ata', name:'阿塔', en:'Ata', lanes:['輔助','凱撒'], cls:'坦克', tier:'T2', win:51.0, pick:5.8, ban:1.9, pro:74, dmg:'Tank', curve:[7,8,8], tags:['造牆封路','回血','牆壁控'], syn:['lorion','iggy','natalya'], ctr:['yorn','telannas','elsu'], note:'大招造船封鎖地形，對無位移陣極具殺傷力' },
+      { id:'wiro', name:'維羅', en:'Wiro', lanes:['輔助','凱撒'], cls:'坦克', tier:'T2', win:50.7, pick:4.1, ban:1.0, pro:71, dmg:'Tank', curve:[7,8,8], tags:['復活被動','連環控','蓄力擊飛'], syn:['violet','krixi'], ctr:['allain','yena'], note:'被動復活吃招，冷門但控制時間長' },
+      { id:'ormarr', name:'渥馬爾', en:'Ormarr', lanes:['輔助','凱撒'], cls:'坦克', tier:'T2', win:51.3, pick:6.9, ban:2.1, pro:75, dmg:'Tank', curve:[9,8,6], tags:['暈眩控制','前期碰撞','減傷'], syn:['ryoma','valhein','tulen'], ctr:['nakroth','keera'], note:'前期一級入侵最強坦輔之一，連續暈眩保排佳' },
+      { id:'zip', name:'皮皮', en:'Zip', lanes:['輔助','中路'], cls:'輔助', tier:'T1', win:51.4, pick:8.2, ban:14.8, pro:89, dmg:'Tank', curve:[8,9,8], tags:['吞隊友','吸兵線','保護大核'], syn:['yorn','capheny','valhein','goverra'], ctr:['grakk','arum','aleister'], note:'吞隊友免死＋吸兵延緩/推進節奏的戰術輔助' },
+      { id:'sephera', name:'瀾', en:'Sephera', lanes:['輔助','中路'], cls:'法師', tier:'T2', win:50.8, pick:6.4, ban:1.6, pro:74, dmg:'AP', curve:[6,8,9], tags:['消耗控場','無敵補血','拉扯'], syn:['hayate','capheny','lorion'], ctr:['taara','maloch'], note:'穩健消耗與冰杖緩速，大招可躲關鍵爆發' },
+      { id:'chaugnar', name:'查戈納爾', en:'Chaugnar', lanes:['輔助'], cls:'輔助', tier:'T2', win:51.5, pick:6.7, ban:4.5, pro:80, dmg:'Tank', curve:[7,8,8], tags:['群體解控','免傷加速','康特控制'], syn:['lauriel','florentino','hayate'], ctr:['gildur','diaochan','azzenka','baldum','grakk'], note:'專克多控場陣容（哥德爾、貂蟬等）的戰術對策角' }
+    ];
+
+    // Ranked-specific priority overrides (2026 10th Anniversary Rift Shuttle meta)
+    const RANK_SCORE = {
+      // Ranked snowball / Rift Shuttle solo-queue staples
+      evita:96, zanis:95, edras:95, valhein:95, billow:95, maloch:94, omega:94, shaosiyuan:94,
+      butterfly:94, aya:94, taara:93, laville:93, thane:93, dirak:92, grakk:92, kaine:92,
+      biron:92, capheny:92, wukong:91, natalya:91, omen:91, krixi:91, gildur:91, goverra:91,
+      stuart:91, baldum:90, volkath:90, zata:90, aleister:90, helen:90, arum:90, preyta:89,
+      yorn:89, erin:89, mina:89, paine:89, quillen:88, moren:88, roxie:88, ming:88,
+      celica:87, darcy:87, telannas:87, murad:87, bright:87, lindis:86, alice:86, diaochan:86,
+      arduin:85, arthur:85, teemee:84, elandorr:84, veera:84, mganga:84,
+      // Pro-heavy / coordination-dependent picks (stronger in Tournament than Ranked)
+      rouie:60, zip:66, xeniel:68, krizzix:68, superman:67, ilumia:74, elsu:78, iggy:82,
+      bijan:82, ryoma:76, florentino:86, lorion:88, liliana:89, nakroth:87, sinestrea:82,
+      aoi:79, raz:86, annette:83, ybneth:85, dolia:88, yan:76
+    };
+    HEROES.forEach(h => {
+      h.rank = RANK_SCORE[h.id] ?? Math.round(Math.min(95, Math.max(58, h.pro * 0.65 + (h.win - 49) * 5.0 + h.ban * 0.25)));
+    });
+
+    const HERO_MAP = Object.fromEntries(HEROES.map(h => [h.id, h]));
+
+    function isRankedMode() { return state.mode === 'free'; }
+    function getModeScore(h) { return isRankedMode() ? h.rank : h.pro; }
+    function getModeTier(h) {
+      const s = getModeScore(h);
+      if (s >= 91) return 'T0';
+      if (s >= 81) return 'T1';
+      if (s >= 70) return 'T2';
+      return 'T3';
+    }
+
+    // =========================================================================
+    // 2. DRAFT SEQUENCES (5 Bans per Side = 20 Steps)
+    // =========================================================================
+    const SEQUENCES = {
+      pro32: [
+        { side:'blue', type:'ban', slot:0, label:'禁用階段 R1 · 藍方 Ban 1' },
+        { side:'red',  type:'ban', slot:0, label:'禁用階段 R1 · 紅方 Ban 1' },
+        { side:'blue', type:'ban', slot:1, label:'禁用階段 R1 · 藍方 Ban 2' },
+        { side:'red',  type:'ban', slot:1, label:'禁用階段 R1 · 紅方 Ban 2' },
+        { side:'blue', type:'ban', slot:2, label:'禁用階段 R1 · 藍方 Ban 3' },
+        { side:'red',  type:'ban', slot:2, label:'禁用階段 R1 · 紅方 Ban 3' },
+        { side:'blue', type:'pick', slot:0, label:'選角階段 R1 · 藍方首搶 (1樓)' },
+        { side:'red',  type:'pick', slot:0, label:'選角階段 R1 · 紅方 1樓' },
+        { side:'red',  type:'pick', slot:1, label:'選角階段 R1 · 紅方 2樓' },
+        { side:'blue', type:'pick', slot:1, label:'選角階段 R1 · 藍方 2樓' },
+        { side:'blue', type:'pick', slot:2, label:'選角階段 R1 · 藍方 3樓' },
+        { side:'red',  type:'pick', slot:2, label:'選角階段 R1 · 紅方 3樓' },
+        { side:'red',  type:'ban', slot:3, label:'禁用階段 R2 · 紅方 Ban 4' },
+        { side:'blue', type:'ban', slot:3, label:'禁用階段 R2 · 藍方 Ban 4' },
+        { side:'red',  type:'ban', slot:4, label:'禁用階段 R2 · 紅方 Ban 5' },
+        { side:'blue', type:'ban', slot:4, label:'禁用階段 R2 · 藍方 Ban 5' },
+        { side:'red',  type:'pick', slot:3, label:'選角階段 R2 · 紅方 4樓' },
+        { side:'blue', type:'pick', slot:3, label:'選角階段 R2 · 藍方 4樓' },
+        { side:'blue', type:'pick', slot:4, label:'選角階段 R2 · 藍方 5樓' },
+        { side:'red',  type:'pick', slot:4, label:'選角階段 R2 · 紅方尾選康特 (5樓)' }
+      ],
+      pro23: [
+        { side:'blue', type:'ban', slot:0, label:'禁用階段 R1 · 藍方 Ban 1' },
+        { side:'red',  type:'ban', slot:0, label:'禁用階段 R1 · 紅方 Ban 1' },
+        { side:'blue', type:'ban', slot:1, label:'禁用階段 R1 · 藍方 Ban 2' },
+        { side:'red',  type:'ban', slot:1, label:'禁用階段 R1 · 紅方 Ban 2' },
+        { side:'blue', type:'pick', slot:0, label:'選角階段 R1 · 藍方首搶 (1樓)' },
+        { side:'red',  type:'pick', slot:0, label:'選角階段 R1 · 紅方 1樓' },
+        { side:'red',  type:'pick', slot:1, label:'選角階段 R1 · 紅方 2樓' },
+        { side:'blue', type:'pick', slot:1, label:'選角階段 R1 · 藍方 2樓' },
+        { side:'blue', type:'pick', slot:2, label:'選角階段 R1 · 藍方 3樓' },
+        { side:'red',  type:'pick', slot:2, label:'選角階段 R1 · 紅方 3樓' },
+        { side:'red',  type:'ban', slot:2, label:'禁用階段 R2 · 紅方 Ban 3' },
+        { side:'blue', type:'ban', slot:2, label:'禁用階段 R2 · 藍方 Ban 3' },
+        { side:'red',  type:'ban', slot:3, label:'禁用階段 R2 · 紅方 Ban 4' },
+        { side:'blue', type:'ban', slot:3, label:'禁用階段 R2 · 藍方 Ban 4' },
+        { side:'red',  type:'ban', slot:4, label:'禁用階段 R2 · 紅方 Ban 5' },
+        { side:'blue', type:'ban', slot:4, label:'禁用階段 R2 · 藍方 Ban 5' },
+        { side:'red',  type:'pick', slot:3, label:'選角階段 R2 · 紅方 4樓' },
+        { side:'blue', type:'pick', slot:3, label:'選角階段 R2 · 藍方 4樓' },
+        { side:'blue', type:'pick', slot:4, label:'選角階段 R2 · 藍方 5樓' },
+        { side:'red',  type:'pick', slot:4, label:'選角階段 R2 · 紅方尾選康特 (5樓)' }
+      ]
+    };
+
+    const ALL_LANES = ['凱撒', '打野', '中路', '魔龍', '輔助'];
+
+    // Class color palette for in-game portrait emblem styling
+    const CLASS_THEME = {
+      '戰士': { grad: 'linear-gradient(135deg, #9a3412, #431407)', ring: '#fb923c', short: '戰' },
+      '刺客': { grad: 'linear-gradient(135deg, #6b21a8, #2e1065)', ring: '#c084fc', short: '刺' },
+      '法師': { grad: 'linear-gradient(135deg, #1d4ed8, #172554)', ring: '#60a5fa', short: '法' },
+      '射手': { grad: 'linear-gradient(135deg, #b45309, #451a03)', ring: '#fbbf24', short: '射' },
+      '坦克': { grad: 'linear-gradient(135deg, #065f46, #022c22)', ring: '#34d399', short: '坦' },
+      '輔助': { grad: 'linear-gradient(135deg, #0f766e, #042f2e)', ring: '#2dd4bf', short: '輔' }
+    };
+
+    // =========================================================================
+    // 3. STATE MANAGEMENT
+    // =========================================================================
+    let state = {
+      mode: 'pro32',
+      blueBans: Array(5).fill(null),
+      redBans: Array(5).fill(null),
+      bluePicks: Array(5).fill(null),
+      redPicks: Array(5).fill(null),
+      stepIdx: 0,
+      freeTarget: { side:'blue', type:'ban', slot:0 },
+      pendingHeroId: null,
+      instantLock: false,
+      history: [],
+      winHistory: [50.0],
+      laneFilter: '全部',
+      recLaneFilter: '自動',
+      search: '',
+      sortBy: 'rec'
+    };
+
+    function getActiveAction() {
+      if (state.mode === 'free') return state.freeTarget;
+      const seq = SEQUENCES[state.mode];
+      if (state.stepIdx < seq.length) return seq[state.stepIdx];
+      return null;
+    }
+
+    function isHeroUsed(heroId) {
+      return state.blueBans.includes(heroId) ||
+             state.redBans.includes(heroId) ||
+             state.bluePicks.includes(heroId) ||
+             state.redPicks.includes(heroId);
+    }
+
+    function snapshot() {
+      return JSON.stringify({
+        blueBans: state.blueBans,
+        redBans: state.redBans,
+        bluePicks: state.bluePicks,
+        redPicks: state.redPicks,
+        stepIdx: state.stepIdx,
+        freeTarget: state.freeTarget,
+        winHistory: state.winHistory
+      });
+    }
+
+    function restore(snapStr) {
+      const s = JSON.parse(snapStr);
+      state.blueBans = s.blueBans;
+      state.redBans = s.redBans;
+      state.bluePicks = s.bluePicks;
+      state.redPicks = s.redPicks;
+      state.stepIdx = s.stepIdx;
+      state.freeTarget = s.freeTarget;
+      state.winHistory = s.winHistory;
+      state.pendingHeroId = null;
+    }
+
+    // =========================================================================
+    // 4. REAL-TIME TEAM ANALYSIS, WIN RATE & RECOMMENDATION ENGINE
+    // =========================================================================
+    function findBestLaneMatching(heroes, allowedLanes = ALL_LANES) {
+      const allowedSet = new Set(allowedLanes);
+      let bestCount = -1;
+      let bestPrimaryScore = -1;
+      let bestAssignments = {};
+
+      function backtrack(idx, usedLanes, curAssign, count, primaryScore) {
+        if (count + (heroes.length - idx) < bestCount) return;
+        if (idx === heroes.length) {
+          if (count > bestCount || (count === bestCount && primaryScore > bestPrimaryScore)) {
+            bestCount = count;
+            bestPrimaryScore = primaryScore;
+            bestAssignments = { ...curAssign };
+          }
+          return;
+        }
+        const h = heroes[idx];
+        let triedAny = false;
+        for (let li = 0; li < h.lanes.length; li++) {
+          const lane = h.lanes[li];
+          if (allowedSet.has(lane) && !usedLanes.has(lane)) {
+            triedAny = true;
+            usedLanes.add(lane);
+            curAssign[h.id] = lane;
+            backtrack(idx + 1, usedLanes, curAssign, count + 1, primaryScore + (li === 0 ? 1 : 0));
+            usedLanes.delete(lane);
+          }
+        }
+        if (!triedAny || count + (heroes.length - idx - 1) >= bestCount) {
+          curAssign[h.id] = h.lanes[0];
+          backtrack(idx + 1, usedLanes, curAssign, count, primaryScore);
+        }
+      }
+
+      backtrack(0, new Set(), {}, 0, 0);
+      return { count: Math.max(0, bestCount), assignments: bestAssignments };
+    }
+
+    function assignLanes(heroIds) {
+      const heroes = heroIds.filter(Boolean).map(id => HERO_MAP[id]);
+      const { count, assignments } = findBestLaneMatching(heroes, ALL_LANES);
+      const filled = new Set(Object.values(assignments));
+      const missing = ALL_LANES.filter(l => !filled.has(l));
+      return { filled, missing, assignments, coveredCount: count };
+    }
+
+    // Determine which lanes an enemy roster has DEFINITELY committed to
+    // (i.e. removing lane L strictly reduces how many of their picks can fit distinct roles)
+    function getConfirmedLanes(heroIds) {
+      const heroes = heroIds.filter(Boolean).map(id => HERO_MAP[id]);
+      if (heroes.length === 0) return new Set();
+      const baseCount = findBestLaneMatching(heroes, ALL_LANES).count;
+      const confirmed = new Set();
+      ALL_LANES.forEach(lane => {
+        const withoutL = findBestLaneMatching(heroes, ALL_LANES.filter(l => l !== lane)).count;
+        if (withoutL < baseCount) confirmed.add(lane);
+      });
+      return confirmed;
+    }
+
+    function analyzeTeam(myIds, enemyIds) {
+      const myHeroes = myIds.filter(Boolean).map(id => HERO_MAP[id]);
+      const enemyHeroes = enemyIds.filter(Boolean).map(id => HERO_MAP[id]);
+      const { filled, missing, assignments, coveredCount } = assignLanes(myIds);
+      const confirmedLanes = getConfirmedLanes(myIds);
+
+      if (myHeroes.length === 0) {
+        return {
+          score: 0, curve: [5,5,5], dmgCounts: { AD:0, AP:0, True:0, Tank:0 },
+          filled, missing, assignments, coveredCount: 0, confirmedLanes,
+          synergies: [], countersHit: [], alerts: [], flexPicks: [],
+          engageCount: 0, controlCount: 0, frontlineCount: 0
+        };
+      }
+
+      let metaSum = 0;
+      myHeroes.forEach(h => {
+        metaSum += (h.win - 51.0) * 1.35 + (getModeScore(h) - 80) * 0.16;
+      });
+
+      let synBonus = 0;
+      const synergies = [];
+      for (let i = 0; i < myHeroes.length; i++) {
+        for (let j = i + 1; j < myHeroes.length; j++) {
+          const a = myHeroes[i], b = myHeroes[j];
+          if (a.syn.includes(b.id) || b.syn.includes(a.id)) {
+            synBonus += 1.65;
+            synergies.push(`${a.name}+${b.name}`);
+          }
+        }
+      }
+
+      let ctrBonus = 0;
+      const countersHit = [];
+      myHeroes.forEach(m => {
+        enemyHeroes.forEach(e => {
+          if (m.ctr.includes(e.id)) {
+            ctrBonus += 1.4;
+            countersHit.push(`${m.name}→${e.name}`);
+          }
+        });
+      });
+
+      const dmgCounts = { AD:0, AP:0, True:0, Tank:0 };
+      let engageCount = 0, controlCount = 0, frontlineCount = 0;
+      let eSum = 0, mSum = 0, lSum = 0;
+
+      myHeroes.forEach(h => {
+        dmgCounts[h.dmg] = (dmgCounts[h.dmg] || 0) + 1;
+        eSum += h.curve[0];
+        mSum += h.curve[1];
+        lSum += h.curve[2];
+        if (h.tags.some(t => /強開|開戰|開團|進場|突襲/.test(t))) engageCount++;
+        if (h.tags.some(t => /控|暈|定身|綁|石|壓制|嘲諷|沉默/.test(t))) controlCount++;
+        if (h.cls === '坦克' || h.cls === '戰士' || h.tags.some(t => /坦|前排|扛傷/.test(t))) frontlineCount++;
+      });
+
+      const flexPicks = myHeroes
+        .filter(h => assignments[h.id] && assignments[h.id] !== h.lanes[0])
+        .map(h => `${h.name}(${assignments[h.id]})`);
+
+      let compPenalty = 0;
+      const alerts = [];
+      const unassignableCount = myHeroes.length - coveredCount;
+
+      if (unassignableCount > 0) {
+        compPenalty -= unassignableCount * 1.4;
+        alerts.push({ type:'warn', text:`部分角色位置重疊 (${unassignableCount}位)，缺 ${missing.join('、')}` });
+      } else if (flexPicks.length > 0) {
+        alerts.push({ type:'good', text:`合理彈性搖擺：${flexPicks.join('、')}` });
+      }
+
+      if (myHeroes.length >= 4) {
+        if (dmgCounts.AP === 0 && dmgCounts.True === 0) {
+          compPenalty -= 1.0;
+          alerts.push({ type:'warn', text:'純物理傷害為主，注意對手物防裝' });
+        } else if (dmgCounts.AD === 0 && dmgCounts.True === 0) {
+          compPenalty -= 0.9;
+          alerts.push({ type:'warn', text:'偏法傷陣容，推塔需靠節奏或召喚物' });
+        }
+        if (frontlineCount === 0 && controlCount === 0) {
+          compPenalty -= 1.1;
+          alerts.push({ type:'warn', text:'缺乏前排與硬控，需靠拉扯陣地作戰' });
+        }
+      }
+      if (synergies.length > 0) {
+        alerts.push({ type:'good', text:`體系連動：${synergies.slice(0,2).join('、')}` });
+      }
+
+      const n = myHeroes.length;
+      return {
+        score: metaSum + synBonus + ctrBonus + compPenalty,
+        curve: [+(eSum/n).toFixed(1), +(mSum/n).toFixed(1), +(lSum/n).toFixed(1)],
+        dmgCounts, filled, missing, assignments, coveredCount, confirmedLanes,
+        synergies, countersHit, alerts, flexPicks,
+        engageCount, controlCount, frontlineCount
+      };
+    }
+
+    function computeWinProbability() {
+      const blueA = analyzeTeam(state.bluePicks, state.redPicks);
+      const redA = analyzeTeam(state.redPicks, state.bluePicks);
+
+      let banShift = 0;
+      const blueBanHeroes = state.blueBans.filter(Boolean).map(id => HERO_MAP[id]);
+      const redBanHeroes = state.redBans.filter(Boolean).map(id => HERO_MAP[id]);
+      const bluePicked = state.bluePicks.filter(Boolean);
+      const redPicked = state.redPicks.filter(Boolean);
+
+      blueBanHeroes.forEach(bh => {
+        bluePicked.forEach(pid => { if (bh.ctr.includes(pid)) banShift += 0.45; });
+        redPicked.forEach(pid => { if (bh.syn.includes(pid)) banShift += 0.45; });
+      });
+      redBanHeroes.forEach(bh => {
+        redPicked.forEach(pid => { if (bh.ctr.includes(pid)) banShift -= 0.45; });
+        bluePicked.forEach(pid => { if (bh.syn.includes(pid)) banShift -= 0.45; });
+      });
+
+      const rawDiff = (blueA.score - redA.score) + banShift;
+      const blueWin = Math.max(18, Math.min(82, 50 + 28 * Math.tanh(rawDiff / 16)));
+      return {
+        blueWin: +blueWin.toFixed(1),
+        redWin: +(100 - blueWin).toFixed(1),
+        blueA,
+        redA
+      };
+    }
+
+    function getRecommendations(side, type, laneLimit = '自動') {
+      const myPicks = (side === 'blue' ? state.bluePicks : state.redPicks).filter(Boolean);
+      const enemyPicks = (side === 'blue' ? state.redPicks : state.bluePicks).filter(Boolean);
+      const myAna = analyzeTeam(myPicks, enemyPicks);
+      const enemyAna = analyzeTeam(enemyPicks, myPicks);
+      const available = HEROES.filter(h => !isHeroUsed(h.id));
+
+      // Confirmed vs still-open positions on the enemy side
+      const confirmedEnemyLanes = enemyAna.confirmedLanes;
+      const openEnemyLanes = ALL_LANES.filter(l => !confirmedEnemyLanes.has(l));
+
+      if (type === 'ban') {
+        return available.map(h => {
+          const mScore = getModeScore(h);
+          const mTier = getModeTier(h);
+          let score = isRankedMode()
+            ? (h.ban * 0.80) + (mScore * 0.45) + (h.win - 50) * 3.6
+            : (h.ban * 0.55) + (mScore * 0.65) + (h.win - 50) * 2.5;
+          const reasons = [];
+
+          // Which of h's lanes are STILL open for the enemy to pick?
+          const hOpenLanes = h.lanes.filter(l => openEnemyLanes.includes(l));
+          const allEnemyLanesLocked = enemyPicks.length > 0 && hOpenLanes.length === 0;
+
+          if (allEnemyLanesLocked) {
+            // Enemy has ALREADY locked all playable positions for this hero -> do NOT waste a ban!
+            score -= 70;
+            reasons.push(`敵方已鎖定 ${h.lanes.join('/')}，免浪費Ban`);
+            return { hero: h, score: +score.toFixed(1), reasons };
+          }
+
+          if (enemyPicks.length > 0 && openEnemyLanes.length < 5) {
+            if (openEnemyLanes.includes(h.lanes[0])) {
+              score += 20;
+              reasons.push(`針對敵方缺口：${h.lanes[0]}`);
+            } else {
+              score += 6;
+              reasons.push(`防敵方 ${hOpenLanes[0]} 搖擺`);
+            }
+          } else if (mTier === 'T0') {
+            reasons.push('版本 T0 強勢角');
+          }
+
+          const threatensUs = myPicks.filter(pid => h.ctr.includes(pid));
+          if (threatensUs.length > 0) {
+            score += threatensUs.length * 15;
+            reasons.push(`克制我方 ${threatensUs.map(id => HERO_MAP[id].name).join('、')}`);
+          }
+          const helpsEnemy = enemyPicks.filter(pid => h.syn.includes(pid) || HERO_MAP[pid].syn.includes(h.id));
+          if (helpsEnemy.length > 0) {
+            score += helpsEnemy.length * (isRankedMode() ? 10 : 16);
+            reasons.push(`拆散敵方 ${helpsEnemy.map(id => HERO_MAP[id].name).join('、')} 連動`);
+          }
+          if (reasons.length === 0) reasons.push(h.note.split('，')[0]);
+          return { hero: h, score: +score.toFixed(1), reasons };
+        }).sort((a, b) => b.score - a.score);
+      }
+
+      return available
+        .filter(h => laneLimit === '自動' || laneLimit === '全部' ? true : h.lanes.includes(laneLimit))
+        .map(h => {
+          const mScore = getModeScore(h);
+          const mTier = getModeTier(h);
+          let score = isRankedMode()
+            ? (mScore * 0.65) + (h.win - 49.0) * 6.0 + (mTier === 'T0' ? 12 : mTier === 'T1' ? 6 : 0)
+            : (mScore * 0.72) + (h.win - 49.0) * 4.0 + (mTier === 'T0' ? 12 : mTier === 'T1' ? 6 : 0);
+          const reasons = [];
+
+          // Evaluate optimal lane coverage if we add h
+          const nextAssign = assignLanes([...myPicks, h.id]);
+          const expandsCoverage = nextAssign.coveredCount > myAna.coveredCount;
+          const assignedLane = nextAssign.assignments[h.id];
+
+          if (expandsCoverage) {
+            score += 20;
+            if (assignedLane && assignedLane !== h.lanes[0]) {
+              reasons.push(`彈性補齊 ${assignedLane}位`);
+            } else {
+              reasons.push(`補齊 ${assignedLane || h.lanes[0]}位`);
+            }
+          } else if (myPicks.length > 0) {
+            score -= 16;
+          }
+
+          const synHits = myPicks.filter(pid => h.syn.includes(pid) || HERO_MAP[pid].syn.includes(h.id));
+          if (synHits.length > 0) {
+            score += synHits.length * (isRankedMode() ? 10 : 16);
+            reasons.push(`連動 ${synHits.map(id => HERO_MAP[id].name).join('+')}`);
+          }
+          const ctrHits = enemyPicks.filter(eid => h.ctr.includes(eid));
+          if (ctrHits.length > 0) {
+            score += ctrHits.length * 14;
+            reasons.push(`康特 ${ctrHits.map(id => HERO_MAP[id].name).join('、')}`);
+          }
+          // Penalize only if enemy ALREADY picked a counter OR still has an open lane to pick a counter
+          const counteredByEnemy = enemyPicks.filter(eid => HERO_MAP[eid].ctr.includes(h.id));
+          if (counteredByEnemy.length > 0) {
+            score -= counteredByEnemy.length * 10;
+          }
+          if (myPicks.length >= 2) {
+            if (myAna.dmgCounts.AP === 0 && (h.dmg === 'AP' || h.dmg === 'True')) {
+              score += 7;
+              reasons.push('補足法術/真傷');
+            }
+            if (myAna.frontlineCount === 0 && (h.cls === '坦克' || h.cls === '戰士')) {
+              score += 8;
+              reasons.push('補強前排坦度');
+            }
+            if (myAna.engageCount === 0 && h.tags.some(t => /強開|開團/.test(t))) {
+              score += 6;
+              reasons.push('提供強開控制');
+            }
+          }
+          if (reasons.length === 0) reasons.push(`${mTier} 強勢・勝率 ${h.win}%`);
+          return { hero: h, score: +score.toFixed(1), reasons };
+        })
+        .sort((a, b) => b.score - a.score);
+    }
+
+    // =========================================================================
+    // 5. ACTIONS
+    // =========================================================================
+    function previewOrLockHero(heroId) {
+      if (isHeroUsed(heroId)) return;
+      const act = getActiveAction();
+      if (!act) return;
+      if (state.instantLock || state.pendingHeroId === heroId) {
+        applyHeroSelection(heroId);
+      } else {
+        state.pendingHeroId = heroId;
+        renderPreviewBar();
+        renderHeroPool();
+      }
+    }
+
+    function applyHeroSelection(heroId) {
+      if (isHeroUsed(heroId)) return;
+      const act = getActiveAction();
+      if (!act) return;
+
+      state.history.push(snapshot());
+      if (act.side === 'blue' && act.type === 'ban') state.blueBans[act.slot] = heroId;
+      if (act.side === 'red' && act.type === 'ban') state.redBans[act.slot] = heroId;
+      if (act.side === 'blue' && act.type === 'pick') state.bluePicks[act.slot] = heroId;
+      if (act.side === 'red' && act.type === 'pick') state.redPicks[act.slot] = heroId;
+
+      state.pendingHeroId = null;
+      const prob = computeWinProbability();
+      if (state.mode === 'free') {
+        state.winHistory.push(prob.blueWin);
+        advanceFreeTarget();
+      } else {
+        const seq = SEQUENCES[state.mode];
+        const nextIdx = seq.findIndex(s => {
+          const arr = state[s.side + (s.type === 'ban' ? 'Bans' : 'Picks')];
+          return arr[s.slot] === null;
+        });
+        state.stepIdx = nextIdx === -1 ? seq.length : nextIdx;
+        state.winHistory.push(prob.blueWin);
+      }
+      render();
+    }
+
+    function advanceFreeTarget() {
+      const order = [
+        ...Array.from({length:5}, (_,i)=>({side:'blue',type:'ban',slot:i})),
+        ...Array.from({length:5}, (_,i)=>({side:'red',type:'ban',slot:i})),
+        ...Array.from({length:5}, (_,i)=>({side:'blue',type:'pick',slot:i})),
+        ...Array.from({length:5}, (_,i)=>({side:'red',type:'pick',slot:i}))
+      ];
+      const next = order.find(o => state[o.side + (o.type === 'ban' ? 'Bans' : 'Picks')][o.slot] === null);
+      if (next) state.freeTarget = next;
+    }
+
+    function clearSlot(side, type, slot) {
+      const arrName = side + (type === 'ban' ? 'Bans' : 'Picks');
+      if (state[arrName][slot] === null) {
+        if (state.mode === 'free') {
+          state.freeTarget = { side, type, slot };
+          state.pendingHeroId = null;
+          render();
+        }
+        return;
+      }
+      state.history.push(snapshot());
+      state[arrName][slot] = null;
+      state.pendingHeroId = null;
+
+      if (state.mode !== 'free') {
+        const seq = SEQUENCES[state.mode];
+        const nextIdx = seq.findIndex(s => {
+          const arr = state[s.side + (s.type === 'ban' ? 'Bans' : 'Picks')];
+          return arr[s.slot] === null;
+        });
+        state.stepIdx = nextIdx === -1 ? seq.length : nextIdx;
+        state.winHistory.push(computeWinProbability().blueWin);
+      } else {
+        state.freeTarget = { side, type, slot };
+        state.winHistory.push(computeWinProbability().blueWin);
+      }
+      render();
+    }
+
+    function undo() {
+      if (state.history.length === 0) return;
+      restore(state.history.pop());
+      render();
+    }
+
+    function aiStep() {
+      const act = getActiveAction();
+      if (!act) return;
+      const recs = getRecommendations(act.side, act.type, '自動');
+      if (recs.length > 0) applyHeroSelection(recs[0].hero.id);
+    }
+
+    function swapSides() {
+      state.history.push(snapshot());
+      [state.blueBans, state.redBans] = [state.redBans, state.blueBans];
+      [state.bluePicks, state.redPicks] = [state.redPicks, state.bluePicks];
+      state.winHistory = state.winHistory.map(w => +(100 - w).toFixed(1));
+      state.pendingHeroId = null;
+      render();
+    }
+
+    function resetDraft() {
+      state.blueBans = Array(5).fill(null);
+      state.redBans = Array(5).fill(null);
+      state.bluePicks = Array(5).fill(null);
+      state.redPicks = Array(5).fill(null);
+      state.stepIdx = 0;
+      state.freeTarget = { side:'blue', type:'ban', slot:0 };
+      state.pendingHeroId = null;
+      state.history = [];
+      state.winHistory = [50.0];
+      render();
+    }
+
+    // =========================================================================
+    // 6. IN-GAME RENDERERS
+    // =========================================================================
+    function tierBadgeColor(tier) {
+      if (tier === 'T0') return 'bg-rose-600 text-white border border-rose-300/40';
+      if (tier === 'T1') return 'bg-amber-600 text-white border border-amber-300/40';
+      return 'bg-slate-700 text-slate-200 border border-slate-500/40';
+    }
+
+    function heroAvatarHtml(h, sizeClass = 'w-9 h-9', isBanned = false) {
+      const theme = CLASS_THEME[h.cls] || CLASS_THEME['戰士'];
+      const char = h.name.slice(0, 1);
+      return `
+        <div class="${sizeClass} rounded-full shrink-0 flex items-center justify-center font-extrabold text-sm text-white relative overflow-hidden"
+          style="background:${theme.grad}; border: 2px solid ${isBanned ? '#ef4444' : theme.ring}; box-shadow: inset 0 0 8px rgba(0,0,0,0.45);">
+          <span class="${isBanned ? 'opacity-40' : ''}">${char}</span>
+          ${isBanned ? `<span class="absolute inset-0 flex items-center justify-center text-rose-500 font-black text-base">✕</span>` : ''}
+        </div>
+      `;
+    }
+
+    function renderBanSlots(containerId, bans, side, activeAct) {
+      const el = document.getElementById(containerId);
+      el.innerHTML = bans.map((hid, idx) => {
+        const h = hid ? HERO_MAP[hid] : null;
+        const isActive = activeAct && activeAct.side === side && activeAct.type === 'ban' && activeAct.slot === idx;
+        return `
+          <button onclick="clearSlot('${side}','ban',${idx})" title="${h ? h.name + ' (點擊移除)' : 'Ban 位 ' + (idx+1)}"
+            class="h-11 rounded-lg border flex items-center justify-center gap-1 px-1 transition cursor-pointer relative overflow-hidden
+            ${isActive ? 'aov-active-slot bg-amber-500/15' : 'bg-[#070e1d] border-slate-700/80 hover:border-amber-400/70'}">
+            ${h ? `
+              <div class="flex flex-col items-center min-w-0">
+                <span class="text-xs font-bold text-slate-300 line-through truncate max-w-full">${h.name}</span>
+                <span class="text-xs text-rose-400 font-mono leading-none">BAN</span>
+              </div>
+            ` : `
+              <span class="text-xs text-slate-500 font-mono">B${idx+1}</span>
+            `}
+          </button>
+        `;
+      }).join('');
+    }
+
+    function renderPickSlots(containerId, picks, side, activeAct, assignments) {
+      const el = document.getElementById(containerId);
+      const isBlue = side === 'blue';
+      el.innerHTML = picks.map((hid, idx) => {
+        const h = hid ? HERO_MAP[hid] : null;
+        const isActive = activeAct && activeAct.side === side && activeAct.type === 'pick' && activeAct.slot === idx;
+        const lane = h ? (assignments[h.id] || h.lanes[0]) : null;
+        const baseCls = isBlue ? 'aov-blue-slot' : 'aov-red-slot';
+        return `
+          <div onclick="clearSlot('${side}','pick',${idx})"
+            class="${baseCls} ${isActive ? 'aov-active-slot' : ''} rounded-lg p-2 transition cursor-pointer flex items-center justify-between gap-2 min-h-[56px] hover:brightness-110">
+            ${h ? `
+              <div class="flex items-center gap-2 min-w-0">
+                ${heroAvatarHtml(h, 'w-9 h-9', false)}
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-bold text-white truncate">${h.name}</span>
+                    <span class="px-1.5 py-0.5 rounded text-xs font-bold ${tierBadgeColor(getModeTier(h))}">${getModeTier(h)}</span>
+                  </div>
+                  <div class="text-xs text-slate-300 truncate">${lane} · ${h.tags.slice(0,2).join('/')}</div>
+                </div>
+              </div>
+              <div class="text-right shrink-0">
+                <div class="text-xs font-mono font-bold text-emerald-400">${h.win}%</div>
+                <div class="text-xs text-slate-400">${idx+1}樓</div>
+              </div>
+            ` : `
+              <div class="flex items-center gap-2">
+                <div class="w-9 h-9 rounded-full border border-dashed ${isActive ? 'border-amber-400 text-amber-300' : 'border-slate-600 text-slate-500'} flex items-center justify-center text-xs font-mono">${idx+1}</div>
+                <span class="text-xs ${isActive ? 'text-amber-300 font-bold' : 'text-slate-400'}">
+                  ${isActive ? (isBlue ? '藍方選角中...' : '紅方選角中...') : `${isBlue ? '藍方' : '紅方'} ${idx+1}樓`}
+                </span>
+              </div>
+              <span class="text-xs font-mono text-slate-500">PICK ${idx+1}</span>
+            `}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderTeamAnalytics(containerId, ana) {
+      const el = document.getElementById(containerId);
+      const { AD, AP, True, Tank } = ana.dmgCounts;
+      const total = Math.max(1, AD + AP + True + Tank);
+      el.innerHTML = `
+        <div class="flex justify-between text-xs">
+          <span class="text-slate-400">陣容分路</span>
+          <span>${ana.missing.length === 0 ? '<b class="text-emerald-400">五路齊全</b>' : '<span class="text-amber-300">缺 ' + ana.missing.join(' ') + '</span>'}</span>
+        </div>
+        <div class="space-y-1">
+          <div class="flex justify-between text-xs">
+            <span class="text-slate-400">傷害組成</span>
+            <span class="font-mono text-slate-200">物${AD} 法${AP} 真${True} 坦${Tank}</span>
+          </div>
+          <div class="w-full h-2 rounded-full overflow-hidden bg-slate-900 flex border border-slate-700">
+            <div style="width:${(AD/total)*100}%; background:#f59e0b"></div>
+            <div style="width:${(AP/total)*100}%; background:#8b5cf6"></div>
+            <div style="width:${(True/total)*100}%; background:#f43f5e"></div>
+            <div style="width:${(Tank/total)*100}%; background:#10b981"></div>
+          </div>
+        </div>
+        <div class="flex justify-between text-xs">
+          <span class="text-slate-400">強開 / 硬控 / 前排</span>
+          <span class="font-mono text-slate-200">${ana.engageCount} / ${ana.controlCount} / ${ana.frontlineCount}</span>
+        </div>
+        ${ana.synergies.length ? `<div class="text-xs text-emerald-400">✦ 連動：${ana.synergies.join('、')}</div>` : ''}
+        ${ana.countersHit.length ? `<div class="text-xs text-sky-400">⚔ 康特：${ana.countersHit.slice(0,3).join('、')}</div>` : ''}
+      `;
+    }
+
+    function renderTrendChart() {
+      const wrap = document.getElementById('trendChartWrap');
+      const pts = state.winHistory;
+      const w = 420, h = 108;
+      const padL = 28, padR = 10, padT = 8, padB = 18;
+      const plotW = w - padL - padR;
+      const plotH = h - padT - padB;
+      const maxSteps = 20;
+
+      const xOf = i => padL + (i / maxSteps) * plotW;
+      const yOf = val => padT + ((80 - Math.max(20, Math.min(80, val))) / 60) * plotH;
+
+      const pathD = pts.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xOf(i).toFixed(1)} ${yOf(v).toFixed(1)}`).join(' ');
+      const areaD = pathD + ` L ${xOf(pts.length - 1).toFixed(1)} ${yOf(50).toFixed(1)} L ${xOf(0).toFixed(1)} ${yOf(50).toFixed(1)} Z`;
+
+      const lastVal = pts[pts.length - 1];
+      const delta = +(lastVal - 50).toFixed(1);
+      document.getElementById('trendDelta').textContent =
+        delta === 0 ? '基準 50.0%' : `藍方 ${lastVal}% (${delta > 0 ? '+' : ''}${delta}%)`;
+
+      wrap.innerHTML = `
+        <svg viewBox="0 0 ${w} ${h}" class="w-full h-full overflow-visible">
+          <line x1="${padL}" y1="${yOf(65)}" x2="${w-padR}" y2="${yOf(65)}" stroke="#334155" stroke-dasharray="3 3" stroke-width="1"/>
+          <line x1="${padL}" y1="${yOf(50)}" x2="${w-padR}" y2="${yOf(50)}" stroke="#94a3b8" stroke-dasharray="4 3" stroke-width="1"/>
+          <line x1="${padL}" y1="${yOf(35)}" x2="${w-padR}" y2="${yOf(35)}" stroke="#334155" stroke-dasharray="3 3" stroke-width="1"/>
+          <text x="2" y="${yOf(65)+4}" fill="#94a3b8" font-size="10">65%</text>
+          <text x="2" y="${yOf(50)+4}" fill="#cbd5e1" font-size="10">50%</text>
+          <text x="2" y="${yOf(35)+4}" fill="#94a3b8" font-size="10">35%</text>
+          <path d="${areaD}" fill="#38bdf8" fill-opacity="0.18" />
+          <path d="${pathD}" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+          ${pts.map((v, i) => `
+            <circle cx="${xOf(i).toFixed(1)}" cy="${yOf(v).toFixed(1)}" r="${i === pts.length - 1 ? 3.8 : 2.3}"
+              fill="${v >= 50 ? '#38bdf8' : '#fb7185'}" />
+          `).join('')}
+          <text x="${padL}" y="${h-3}" fill="#94a3b8" font-size="10">R1 Ban</text>
+          <text x="${xOf(8)}" y="${h-3}" fill="#94a3b8" font-size="10">R1 Pick</text>
+          <text x="${xOf(14)}" y="${h-3}" fill="#94a3b8" font-size="10">R2 Ban</text>
+          <text x="${xOf(18)}" y="${h-3}" fill="#94a3b8" font-size="10">尾選</text>
+        </svg>
+      `;
+    }
+
+    function renderPhaseBars(blueA, redA) {
+      const phases = [
+        { label: '前期 (0-6m)', b: blueA.curve[0], r: redA.curve[0] },
+        { label: '中期 (6-12m)', b: blueA.curve[1], r: redA.curve[1] },
+        { label: '後期 (12m+)', b: blueA.curve[2], r: redA.curve[2] }
+      ];
+      document.getElementById('phaseBars').innerHTML = phases.map(p => {
+        const tot = Math.max(1, p.b + p.r);
+        const bp = (p.b / tot) * 100;
+        return `
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs font-mono">
+              <span class="text-sky-400 font-bold">${p.b}</span>
+              <span class="text-slate-300 font-sans">${p.label}</span>
+              <span class="text-rose-400 font-bold">${p.r}</span>
+            </div>
+            <div class="w-full h-1.5 rounded-full overflow-hidden bg-slate-800 flex">
+              <div style="width:${bp}%; background:#38bdf8"></div>
+              <div style="width:${100-bp}%; background:#fb7185"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderRecommendations(prob) {
+      const act = getActiveAction();
+      const titleEl = document.getElementById('recTitle');
+      const subEl = document.getElementById('recSubtitle');
+      const filterWrap = document.getElementById('recFilterWrap');
+      const alertsEl = document.getElementById('compAlerts');
+      const listEl = document.getElementById('recList');
+
+      if (!act) {
+        titleEl.textContent = 'BP 已完成！最終陣容勝負評估';
+        subEl.textContent = `藍方預估勝率 ${prob.blueWin}% vs 紅方 ${prob.redWin}%`;
+        filterWrap.innerHTML = '';
+        const allAlerts = [
+          ...prob.blueA.alerts.map(a => ({ ...a, side:'藍方' })),
+          ...prob.redA.alerts.map(a => ({ ...a, side:'紅方' }))
+        ];
+        alertsEl.innerHTML = allAlerts.length
+          ? allAlerts.map(a => `<span class="px-2 py-0.5 rounded-full text-xs border border-slate-700 bg-slate-900/80 ${a.type==='warn'?'text-amber-300':'text-emerald-400'}">${a.side}：${a.text}</span>`).join('')
+          : '<span class="text-xs text-emerald-400">雙方陣容配置完整均衡，進入艾森諾戰場實戰節奏比拼！</span>';
+        listEl.innerHTML = `
+          <div class="sm:col-span-2 p-2.5 rounded-lg bg-[#070d1c] border border-amber-500/30 text-xs space-y-1 text-slate-200">
+            <div class="font-bold text-amber-300">戰術總結：</div>
+            <div>• 藍方前中後期戰力：<span class="font-mono text-sky-300">${prob.blueA.curve.join(' / ')}</span>｜紅方前中後期戰力：<span class="font-mono text-rose-300">${prob.redA.curve.join(' / ')}</span></div>
+            <div>• ${prob.blueA.curve[0] > prob.redA.curve[0] ? '藍方前期入侵與線權較強，宜主動搶魔龍與野區節奏。' : '紅方前期碰撞較強，藍方應穩住發育待關鍵大招裝備成型。'}</div>
+          </div>
+        `;
+        return;
+      }
+
+      const sideName = act.side === 'blue' ? '藍方' : '紅方';
+      const ana = act.side === 'blue' ? prob.blueA : prob.redA;
+      const enemyAna = act.side === 'blue' ? prob.redA : prob.blueA;
+      const enemyConfirmed = [...enemyAna.confirmedLanes];
+      const enemyOpen = ALL_LANES.filter(l => !enemyAna.confirmedLanes.has(l));
+
+      if (act.type === 'ban') {
+        titleEl.textContent = `戰術教練：${sideName} Ban 位推薦`;
+        subEl.textContent = enemyConfirmed.length > 0
+          ? `敵方已確切鎖定 [${enemyConfirmed.join('、')}] → 聚焦封鎖敵方尚缺位置 [${enemyOpen.join('、')}]`
+          : '優先封鎖版本 T0 怪物、對手體系連動與我方陣容天敵';
+        filterWrap.innerHTML = '';
+      } else {
+        titleEl.textContent = `戰術教練：${sideName} 後續選角搭配建議`;
+        subEl.textContent = ana.missing.length ? `尚缺分路：${ana.missing.join('、')}（支援彈性搖擺補位）` : '五路已齊全，可依康特與彈性搖擺調整';
+        const lanes = ['自動', ...ALL_LANES];
+        filterWrap.innerHTML = lanes.map(l => `
+          <button onclick="setRecLane('${l}')" class="px-2 py-0.5 rounded text-xs cursor-pointer border ${state.recLaneFilter===l ? 'bg-amber-500 text-slate-950 font-bold border-amber-300' : 'bg-[#070d1c] border-slate-700 text-slate-300'}">${l}</button>
+        `).join('');
+      }
+
+      alertsEl.innerHTML = ana.alerts.map(a => `
+        <span class="px-2 py-0.5 rounded-full text-xs border border-slate-700 bg-[#070d1c] ${a.type==='warn'?'text-amber-300':'text-emerald-400'}">${a.text}</span>
+      `).join('');
+
+      const recs = getRecommendations(act.side, act.type, state.recLaneFilter).slice(0, 4);
+      listEl.innerHTML = recs.map((r, i) => `
+        <button onclick="applyHeroSelection('${r.hero.id}')"
+          class="text-left p-2 rounded-lg border border-slate-700/80 bg-[#070d1c] hover:border-amber-400 transition cursor-pointer flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            ${heroAvatarHtml(r.hero, 'w-8 h-8', false)}
+            <div class="min-w-0">
+              <div class="flex items-center gap-1">
+                <span class="text-xs font-mono text-amber-400 font-bold">#${i+1}</span>
+                <span class="text-xs font-bold text-white truncate">${r.hero.name}</span>
+                <span class="text-xs text-slate-400">${r.hero.lanes[0]}</span>
+              </div>
+              <div class="text-xs text-emerald-400 truncate">${r.reasons.join('・')}</div>
+            </div>
+          </div>
+          <div class="text-right shrink-0">
+            <div class="text-xs font-mono font-bold text-slate-100">${r.hero.win}%</div>
+            <div class="text-xs text-amber-300 font-bold">${act.type === 'ban' ? '禁用' : '鎖定'}</div>
+          </div>
+        </button>
+      `).join('');
+    }
+
+    function renderHeroPool() {
+      const lanes = ['全部', ...ALL_LANES];
+      document.getElementById('laneTabs').innerHTML = lanes.map(l => `
+        <button onclick="setLaneFilter('${l}')" class="px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer border transition ${state.laneFilter === l ? 'bg-amber-500 text-slate-950 border-amber-300' : 'bg-[#070d1c] border-slate-700 text-slate-300 hover:border-slate-500'}">${l}</button>
+      `).join('');
+
+      const act = getActiveAction();
+      let list = HEROES.slice();
+      if (state.laneFilter !== '全部') {
+        list = list.filter(h => h.lanes.includes(state.laneFilter));
+      }
+      if (state.search.trim()) {
+        const q = state.search.trim().toLowerCase();
+        list = list.filter(h =>
+          h.name.toLowerCase().includes(q) ||
+          h.en.toLowerCase().includes(q) ||
+          h.tags.some(t => t.toLowerCase().includes(q)) ||
+          h.cls.includes(q) ||
+          h.note.toLowerCase().includes(q)
+        );
+      }
+
+      let scoreMap = {};
+      if (act) {
+        getRecommendations(act.side, act.type, '自動').forEach(r => { scoreMap[r.hero.id] = r.score; });
+      }
+
+      list.sort((a, b) => {
+        if (state.sortBy === 'win') return b.win - a.win;
+        if (state.sortBy === 'pro') return getModeScore(b) - getModeScore(a);
+        if (state.sortBy === 'ban') return b.ban - a.ban;
+        return (scoreMap[b.id] ?? getModeScore(b)) - (scoreMap[a.id] ?? getModeScore(a));
+      });
+
+      const scorePrefix = isRankedMode() ? '排' : '職';
+      document.getElementById('heroGrid').innerHTML = list.map(h => {
+        const used = isHeroUsed(h.id);
+        const isPending = state.pendingHeroId === h.id;
+        const mTier = getModeTier(h);
+        const mScore = getModeScore(h);
+        return `
+          <button ${used || !act ? 'disabled' : `onclick="previewOrLockHero('${h.id}')" ondblclick="applyHeroSelection('${h.id}')"`}
+            title="${h.note}"
+            class="text-left p-1.5 rounded-lg border transition flex flex-col items-center gap-1 relative
+            ${used ? 'opacity-30 cursor-not-allowed bg-slate-900 border-slate-800' :
+              isPending ? 'aov-active-slot bg-amber-500/15 cursor-pointer' :
+              'bg-[#081022] border-slate-700/80 hover:border-amber-400/80 cursor-pointer'}">
+            <div class="w-full flex items-center justify-between">
+              <span class="px-1 rounded text-xs font-bold ${tierBadgeColor(mTier)}">${mTier}</span>
+              <span class="text-xs font-mono text-emerald-400">${h.win}%</span>
+            </div>
+            ${heroAvatarHtml(h, 'w-10 h-10', false)}
+            <div class="text-xs font-bold text-slate-100 truncate w-full text-center">${h.name}</div>
+            <div class="text-xs text-slate-400 truncate w-full text-center">${h.lanes[0]} · ${scorePrefix}${mScore}</div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function renderPreviewBar() {
+      const act = getActiveAction();
+      const lockBtn = document.getElementById('lockBtn');
+      const infoEl = document.getElementById('previewInfo');
+      const h = state.pendingHeroId ? HERO_MAP[state.pendingHeroId] : null;
+
+      if (!act) {
+        lockBtn.disabled = true;
+        lockBtn.textContent = 'BP 已完成';
+        infoEl.innerHTML = '雙方陣容皆已鎖定，可點擊左右任一格移除重選';
+        return;
+      }
+
+      if (h) {
+        const mTier = getModeTier(h);
+        const mScore = getModeScore(h);
+        lockBtn.disabled = false;
+        lockBtn.textContent = act.type === 'ban' ? `確定禁用 ${h.name}` : `確定鎖定 ${h.name}`;
+        infoEl.innerHTML = `<b class="text-amber-300">${h.name}</b> (${h.lanes.join('/')}・${mTier})｜勝率 <b class="text-emerald-400">${h.win}%</b>・${isRankedMode()?'排位':'職評'} ${mScore}｜${h.note}`;
+      } else {
+        lockBtn.disabled = true;
+        lockBtn.textContent = act.type === 'ban' ? '確定禁用' : '確定鎖定';
+        infoEl.innerHTML = '點選英雄即可預覽，雙擊英雄或按右方金色按鈕確認（或勾選「單擊直接鎖定」）';
+      }
+    }
+
+    function render() {
+      const act = getActiveAction();
+      const prob = computeWinProbability();
+
+      // Header win-rate & banner
+      document.getElementById('blueHeaderWin').textContent = `${prob.blueWin}%`;
+      document.getElementById('redHeaderWin').textContent = `${prob.redWin}%`;
+      document.getElementById('blueBar').style.width = `${prob.blueWin}%`;
+      document.getElementById('redBar').style.width = `${prob.redWin}%`;
+
+      const bannerEl = document.getElementById('turnBanner');
+      if (!act) {
+        bannerEl.innerHTML = `<span class="text-emerald-400">✔ 雙方 10 Ban 10 Pick 已完成！</span>`;
+      } else if (state.mode === 'free') {
+        const sTxt = act.side === 'blue' ? '藍方' : '紅方';
+        const tTxt = act.type === 'ban' ? `第 ${act.slot+1} 禁` : `${act.slot+1}樓選角`;
+        bannerEl.innerHTML = `<span class="${act.side==='blue'?'text-sky-300':'text-rose-300'}">自由模式 · 目前操作：${sTxt} ${tTxt}</span>`;
+      } else {
+        bannerEl.innerHTML = `<span class="text-amber-300 mr-1.5 font-mono">[${state.stepIdx+1}/20]</span><span class="${act.side==='blue'?'text-sky-300':'text-rose-300'}">${act.label}</span>`;
+      }
+
+      document.getElementById('blueBanCount').textContent = `${state.blueBans.filter(Boolean).length}/5`;
+      document.getElementById('redBanCount').textContent = `${state.redBans.filter(Boolean).length}/5`;
+      document.getElementById('bluePickCount').textContent = `${state.bluePicks.filter(Boolean).length}/5`;
+      document.getElementById('redPickCount').textContent = `${state.redPicks.filter(Boolean).length}/5`;
+
+      renderBanSlots('blueBans', state.blueBans, 'blue', act);
+      renderBanSlots('redBans', state.redBans, 'red', act);
+      renderPickSlots('bluePicks', state.bluePicks, 'blue', act, prob.blueA.assignments);
+      renderPickSlots('redPicks', state.redPicks, 'red', act, prob.redA.assignments);
+
+      renderTeamAnalytics('blueAnalytics', prob.blueA);
+      renderTeamAnalytics('redAnalytics', prob.redA);
+      renderTrendChart();
+      renderPhaseBars(prob.blueA, prob.redA);
+      renderRecommendations(prob);
+      renderHeroPool();
+      renderPreviewBar();
+
+      document.getElementById('undoBtn').disabled = state.history.length === 0;
+      document.getElementById('aiStepBtn').disabled = !act;
+    }
+
+    // Global callbacks
+    window.clearSlot = clearSlot;
+    window.previewOrLockHero = previewOrLockHero;
+    window.applyHeroSelection = applyHeroSelection;
+    window.setLaneFilter = l => { state.laneFilter = l; renderHeroPool(); };
+    window.setRecLane = l => { state.recLaneFilter = l; renderRecommendations(computeWinProbability()); };
+
+    // Events
+    document.getElementById('modeSelect').addEventListener('change', e => { state.mode = e.target.value; resetDraft(); });
+    document.getElementById('aiStepBtn').addEventListener('click', aiStep);
+    document.getElementById('undoBtn').addEventListener('click', undo);
+    document.getElementById('swapBtn').addEventListener('click', swapSides);
+    document.getElementById('resetBtn').addEventListener('click', resetDraft);
+    document.getElementById('instantLockChk').addEventListener('change', e => { state.instantLock = e.target.checked; });
+    document.getElementById('lockBtn').addEventListener('click', () => {
+      if (state.pendingHeroId) applyHeroSelection(state.pendingHeroId);
+    });
+    document.getElementById('searchInput').addEventListener('input', e => { state.search = e.target.value; renderHeroPool(); });
+    document.getElementById('sortSelect').addEventListener('change', e => { state.sortBy = e.target.value; renderHeroPool(); });
+
+    render();
+  </script>
+</body>
+</html>
